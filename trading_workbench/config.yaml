@@ -11,7 +11,6 @@ ingress: true
 ingress_port: 8099
 panel_icon: mdi:chart-line
 panel_title: Trading
-# Replace when the GitHub remote is known. Must match ghcr.io/<owner>/<repository>.
-image: ghcr.io/replace-me/trading-workbench
+image: ghcr.io/jokestorm/trading-workbench
 options: {}
 schema: {}

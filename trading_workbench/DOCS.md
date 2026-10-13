@@ -1,18 +1,19 @@
 # Installation and updates
 
-## When the remote is available
+## Publishing and installing
 
-1. Add the GitHub remote to this local Git repository. Do not put access tokens in its URL.
-2. Replace `image` in `trading_workbench/config.yaml` with
-   `ghcr.io/<owner>/<repository>` in lowercase. The workflow checks this against
-   the actual GitHub repository before publishing a version tag.
+1. Push development changes to `https://github.com/jokestorm/trading-workbench`.
+   Do not put access tokens in the remote URL.
+2. The app image is `ghcr.io/jokestorm/trading-workbench`. The workflow checks this
+   against the actual GitHub repository before publishing a version tag.
 3. Enable GitHub Actions. The workflow uses GitHub-hosted Ubuntu runners with
    QEMU for ARM64. It builds and runs container self-tests on development pushes
    and pull requests. The release job uses `GITHUB_TOKEN` with `packages: write`;
    no separate registry token is required for publication.
 4. Run checks, then tag the version from `config.yaml`, for example `v0.1.0`.
    The tag pipeline publishes the matching image after the checks pass.
-5. Add the GitHub repository URL in Home Assistant's app store repository menu.
+5. Add `https://github.com/jokestorm/trading-workbench` in Home Assistant's app
+   store repository menu.
    Install Trading Workbench, start it, and use Open Web UI or the sidebar.
 
 Home Assistant needs permission to clone the repository and pull the container.

@@ -38,8 +38,9 @@ Develop on the PC; build and release through GitHub; run on HAOS.
 
 ## Release boundaries
 
-The remote and registry address are not set yet. The source and pipeline are
-local preparation, not a published or Pi-verified release. Docker is unavailable
+The repository is `https://github.com/jokestorm/trading-workbench`; the container
+image is `ghcr.io/jokestorm/trading-workbench`. The source and pipeline are
+preparation, not a published or Pi-verified release. Docker is unavailable
 on the current PC; Linux/ARM64/container and HA ingress acceptance remain to run.
 Keep the working Windows instance available during staged validation.
 

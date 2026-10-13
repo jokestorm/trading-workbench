@@ -10,9 +10,10 @@ Raspberry Pi 4 running HAOS `rpi4-64` / ARM64. The app runs in its own container
 and opens through Home Assistant ingress. Start with an empty database.
 
 The local repository includes the app source, Home Assistant store metadata,
-container definition, ingress changes, tests, and a GitHub Actions pipeline. No remote
-is configured, no image is published, and Pi/container execution is not verified.
-The registry placeholder must be filled when the GitHub remote is provided.
+container definition, ingress changes, tests, and a GitHub Actions pipeline.
+Repository: https://github.com/jokestorm/trading-workbench
+Container image: `ghcr.io/jokestorm/trading-workbench`.
+No image is published yet, and Pi/container execution is not verified.
 
 - [Staged migration plan](docs/home-assistant-plan.md)
 - [Install, release, storage, and update instructions](trading_workbench/DOCS.md)
