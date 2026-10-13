@@ -1,0 +1,17 @@
+name: Trading Workbench
+version: "0.1.0"
+slug: trading_workbench
+description: Personal trade journal and futures analysis workspace
+arch:
+  - aarch64
+startup: application
+boot: auto
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:chart-line
+panel_title: Trading
+# Replace when the GitHub remote is known. Must match ghcr.io/<owner>/<repository>.
+image: ghcr.io/replace-me/trading-workbench
+options: {}
+schema: {}

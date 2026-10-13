@@ -1,0 +1,6 @@
+Execution ID,Timestamp,Symbol,Side,Quantity,Price,Fees,Asset Type,Point Value
+sample-1,2026-10-06 09:30:00,MESZ26,BUY,2,6000,2,Futures,5
+sample-2,2026-10-06 09:32:00,MESZ26,BUY,1,6003,1,Futures,5
+sample-3,2026-10-06 09:34:00,MESZ26,SELL,1,6004,1,Futures,5
+sample-4,2026-10-06 09:36:00,MESZ26,SELL,3,6006,3,Futures,5
+sample-5,2026-10-06 09:38:00,MESZ26,BUY,1,6002,1,Futures,5

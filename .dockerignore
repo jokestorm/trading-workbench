@@ -1,0 +1,17 @@
+**/bin
+**/obj
+.git
+.codex
+.agents
+data
+artifacts
+node_modules
+docs
+tests
+.env*
+**/*.protected
+**/*.pfx
+**/*.pem
+**/auth.json
+**/*.db*
+**/*.log

@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+const base='http://127.0.0.1:5174';
+const post=async(path,body)=>{const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
+const initial=await (await fetch(base+'/api/trades')).json();
+const csv=await readFile(new URL('./fixtures/executions.csv',import.meta.url),'utf8');
+const request={fileName:'executions.csv',csv,columns:{executionId:0,timestamp:1,symbol:2,side:3,quantity:4,price:5,fees:6,assetType:7,multiplier:8},account:'HTTP fixture '+crypto.randomUUID(),assetType:'Futures',multiplier:5};
+const preview=await post('/api/imports/preview',request);assert.equal(preview.status,200);assert.equal(preview.body.errors.length,0);assert.equal(preview.body.trades.length,2);assert.equal(preview.body.netPnl,77);
+assert.equal((await (await fetch(base+'/api/trades')).json()).length,initial.length);
+const committed=await post('/api/imports/commit',{token:preview.body.token});assert.equal(committed.status,200);assert.equal(committed.body.imported,2);
+const trade=preview.body.trades[0].trade;
+const edited=await fetch(base+'/api/trades/'+trade.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({setup:'Reviewed',notes:'Preserve on reimport',risk:50,entry:1,exit:999})});assert.equal(edited.status,200);const after=await edited.json();assert.equal(after.netPnl,59);assert.equal(after.notes,'Preserve on reimport');
+const repeated=await post('/api/imports/preview',request);assert.equal(repeated.body.duplicates,2);assert.equal(repeated.body.trades.length,0);assert.equal((await post('/api/imports/commit',{token:repeated.body.token})).status,200);
+const all=await (await fetch(base+'/api/trades')).json();assert.equal(all.length,initial.length+2);assert.equal(all.find(t=>t.id===trade.id).notes,'Preserve on reimport');
+const fills=await (await fetch(base+'/api/trades/'+trade.id+'/fills')).json();assert.equal(fills.length,4);assert.equal(fills.reduce((s,f)=>s+f.execution.fees,0),6);
+const invalid=await post('/api/imports/preview',{...request,csv:csv.replace(',6000,2,',',6000,9,')});assert.ok(invalid.body.errors.length>0);assert.equal((await post('/api/imports/commit',{token:invalid.body.token})).status,400);assert.equal((await (await fetch(base+'/api/trades')).json()).length,initial.length+2);
+for(const asset of ['/import.js','/csv.js','/import.css'])assert.equal((await fetch(base+asset)).status,200);
+console.log('PASS HTTP preview, atomic import, reimport, source conflicts, preserved notes, immutable accounting and allocated fills');
