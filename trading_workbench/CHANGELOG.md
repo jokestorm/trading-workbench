@@ -1,6 +1,30 @@
 # Changelog
 
-## Unreleased
+## 0.1.3
+
+- Recognize Micro Ether (MET) futures statements using the 0.1 contract point
+  value; add historical METF26 accounting/reconciliation and reimport checks.
+- Recognize standard WTI crude (CL) with a 1,000 point value and 0.01 price tick.
+  Verify mixed CL/MCL/MES/MET/MGC imports, fee reconciliation, and duplicate skips
+  with synthetic data.
+
+- Put market Analyze beside the chart controls, name its selected contract, and
+  default the chart to the resolved MES contract. Keep results/history scoped to
+  the displayed contract and preserve manual selections through refresh/rollover.
+- Add a separate Review portfolio button in the journal toolbar.
+
+- Display market results as a compact trend, position-aware action, short reason,
+  and entry/stop/target. Remove research references and commentary; collapse price
+  follow-up until requested. Preserve journal review and recommendation guards.
+
+- Separate market-analysis and journal-review prompts and record their distinct
+  versions in saved results. Enable brief live research for market analysis only,
+  with an advisory two-search budget and a 90-second hard
+  execution limit. Journal review remains snapshot-only with a four-minute limit.
+
+- Expand market analysis guidance to cover moving averages, RSI, MACD, trendlines,
+  support/resistance, and volume using available observations. Allow position-size
+  discussion with explicit inputs, assumptions, and per-contract risk.
 
 - Consolidate market refresh, frozen inputs, execution, guards, and saving behind
   one background analysis workflow shared by Market and Journal.

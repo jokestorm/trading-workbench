@@ -48,6 +48,33 @@ public static class StatementChecks
         try{imports.Preview(request with{Csv=csv.Replace("9/8/26 09:00:00,FUTURE,BUY,+1,TO OPEN","9/8/26 09:00:00,FUTURE,BUY,+1,TO CLOSE")});}catch(FormatException){rejected=true;}
         Check(rejected,"unknown starting positions are rejected using position effect");
         var mismatch=imports.Preview(request with{Csv=csv.Replace("DEC 26,+2,6010.00","DEC 26,+3,6010.00")});Check(mismatch.Errors.Length>0&&!mismatch.Reconciliation!.Reconciled,"holdings mismatch blocks import");
+        // Two contracts moving $50/ether at 0.1 ether each earn $10 gross.
+        // The open position marks $50 lower: -$10 settlement P/L.
+        var ether=csv.Replace("MESZ26","METF26").Replace("DEC 26","JAN 26")
+            .Replace("9/7/26","1/5/26").Replace("9/8/26","1/6/26")
+            .Replace("6000.00","3000.00").Replace("6001.00","3050.00")
+            .Replace("6010.00","3500.00").Replace("6009.00","3450.00");
+        var etherPreview=imports.Preview(request with{Csv=ether});
+        Check(etherPreview.Errors.Length==0&&etherPreview.Reconciliation!.Reconciled&&etherPreview.Trades.Single().Trade.Multiplier==.1m&&etherPreview.Trades.Single().Trade.GrossPnl==10m&&etherPreview.NetPnl==.96m,"METF26 statement uses the Micro Ether point value and reconciles closed/open P/L");
+        imports.Commit(etherPreview.Token);var etherRepeat=imports.Preview(request with{Csv=ether});
+        Check(etherRepeat.Errors.Length==0&&etherRepeat.Duplicates==1&&etherRepeat.Trades.Length==0,"reimporting historical METF26 executions skips the saved closed trade");
+        var instruments=new[]{("CLF27",70m,70.02m,20m),("MCLG27",70m,70.10m,10m),("MESH27",6000m,6002m,10m),("METJ27",3000m,3050m,5m),("MGCZ27",2500m,2501m,10m)};
+        var ledger=new List<string>{"1/6/27,1/6/27,08:00:00,BAL,--,Starting futures balance,--,--,--,1000.00"};
+        var history=new List<string>();decimal cash=1000;
+        string Number(decimal value)=>value.ToString("0.00",System.Globalization.CultureInfo.InvariantCulture);
+        for(var i=0;i<instruments.Length;i++)
+        {
+            var (symbol,entry,exit,gross)=instruments[i];var expiration=new[]{"JAN 27","FEB 27","MAR 27","APR 27","DEC 27"}[i];var minute=$"09:{i:00}";
+            cash-=1;ledger.Add($"1/6/27,1/6/27,{minute}:00,TRD,{i*2+1},BOT +1 /{symbol}:XCME @{Number(entry)},0,-1,--,{Number(cash)}");
+            cash+=gross-1;ledger.Add($"1/6/27,1/6/27,{minute}:30,TRD,{i*2+2},SOLD -1 /{symbol}:XCME @{Number(exit)},0,-1,{Number(gross)},{Number(cash)}");
+            history.Add($",1/6/27 {minute}:00,FUTURE,BUY,+1,TO OPEN,/{symbol},{expiration},,FUTURE,{Number(entry)},{Number(entry)},LMT");
+            history.Add($",1/6/27 {minute}:30,FUTURE,SELL,-1,TO CLOSE,/{symbol},{expiration},,FUTURE,{Number(exit)},{Number(exit)},LMT");
+        }
+        var mixed="Account Statement for SYNTHETIC\nFutures Statements\nTrade Date,Exec Date,Exec Time,Type,Ref #,Description,Misc Fees,Commissions & Fees,Amount,Balance\n"+string.Join('\n',ledger)+"\nAccount Trade History\n,Exec Time,Spread,Side,Qty,Pos Effect,Symbol,Exp,Strike,Type,Price,Net Price,Order Type\n"+string.Join('\n',history);
+        var mixedPreview=imports.Preview(request with{Csv=mixed,Account="Mixed fixture"});
+        Check(mixedPreview.Errors.Length==0&&mixedPreview.Trades.Length==5&&mixedPreview.Reconciliation!.Reconciled&&mixedPreview.Reconciliation.ClosedGross==55m&&mixedPreview.NetPnl==45m,"mixed CL, MCL, MES, MET and MGC statement uses distinct multipliers and reconciles $45 net after fees");
+        imports.Commit(mixedPreview.Token);var mixedRepeat=imports.Preview(request with{Csv=mixed,Account="Mixed fixture"});
+        Check(mixedRepeat.Errors.Length==0&&mixedRepeat.Duplicates==5&&mixedRepeat.Trades.Length==0,"mixed-contract statement reimport skips all saved trades");
         Console.WriteLine("All statement checks passed.");
     }
 }

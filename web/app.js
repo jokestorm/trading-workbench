@@ -1,11 +1,11 @@
 import { fetchApp, appUrl } from './http.js';
-import { mountJournalChart } from './journal-chart.js?v=ha-0.1.2';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.2';
-import { mountImport } from './import.js?v=ha-0.1.2';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.2';
-import { mountMarket } from './market.js?v=ha-0.1.2';
-import { mountAI } from './ai.js?v=background-1';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.2';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.3';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.3';
+import { mountImport } from './import.js?v=ha-0.1.3';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.3';
+import { mountMarket } from './market.js?v=ha-0.1.3';
+import { mountAI } from './ai.js?v=ha-0.1.3';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.3';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;

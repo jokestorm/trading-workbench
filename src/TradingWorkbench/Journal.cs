@@ -7,7 +7,7 @@ namespace TradingWorkbench;
 public record InstrumentDefinition(string Root, string AssetType, decimal PointValue);
 public static class InstrumentCatalog
 {
-    public static InstrumentDefinition[] All => [new("MES", "Futures", 5m), new("MNQ", "Futures", 2m), new("MCL", "Futures", 100m),new("MGC","Futures",10m), new("ES", "Futures", 50m), new("NQ", "Futures", 20m), new("EQUITY", "Equity", 1m)];
+    public static InstrumentDefinition[] All => [new("MES", "Futures", 5m), new("MNQ", "Futures", 2m), new("MCL", "Futures", 100m), new("CL", "Futures", 1000m),new("MGC","Futures",10m), new("MET","Futures",.1m), new("ES", "Futures", 50m), new("NQ", "Futures", 20m), new("EQUITY", "Equity", 1m)];
 }
 public record TradeData
 {

@@ -45,6 +45,11 @@ Keep the app running until it shows **ChatGPT connected**. If device-code login
 is unavailable, enable it in your ChatGPT account's security settings first.
 
 Then select an instrument, enter your current position, and choose **Analyze**.
+The button sits beside the chart controls and names the selected dated contract.
+The chart defaults to MES when it is available in the watchlist. Changing the
+contract changes the analysis target and its visible signal history. Use
+**Review portfolio** in the journal toolbar for a separate review of the filtered
+closed trades; it opens the journal's Portfolio review section.
 Journal analysis shares the same login. Check connection, Cancel sign-in, and
 Sign out are available in the connection section. Analysis sends the selected
 snapshot to OpenAI using the ChatGPT account; it does not place broker orders.
@@ -54,6 +59,17 @@ sections. You can close the page or lose your phone connection; the run continue
 and the app reconnects to its progress or saved result when reopened. Use Cancel
 to stop it explicitly. Restarting the app interrupts unfinished analysis without
 automatically submitting another request. Start a fresh analysis to retry.
+
+Market analysis may perform brief live web research for relevant catalysts and
+economic releases. The prompt requests at most two searches and two page opens,
+targeting 20 seconds of research; these are model instructions, not separate
+enforced tool limits. The entire market analysis execution has a 90-second hard
+timeout. Market results display only trend, a position-aware action, a short
+reason, and relevant entry/stop/target levels. Research runs quietly; references
+and unavailable-research messages are omitted. Price follow-up is collapsed.
+Frozen Schwab observations remain authoritative for prices and position
+checks. Research cannot override stale-data WAIT results. Journal review uses a
+separate prompt with web search disabled and a four-minute execution timeout.
 
 Run status is stored under `/data/workbench/analysis/jobs`; completed results
 remain in `/data/workbench/analysis`. Both survive app updates and restarts.

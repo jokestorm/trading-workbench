@@ -13,7 +13,8 @@ The local repository includes the app source, Home Assistant store metadata,
 container definition, ingress changes, tests, and a GitHub Actions pipeline.
 Repository: https://github.com/jokestorm/trading-workbench
 Container image: `ghcr.io/jokestorm/trading-workbench`.
-No image is published yet, and Pi/container execution is not verified.
+Versioned ARM64 images are published through GitHub Actions. Journal storage,
+ingress, and Schwab access have been verified on the Pi.
 
 - [Staged migration plan](docs/home-assistant-plan.md)
 - [Install, release, storage, and update instructions](trading_workbench/DOCS.md)

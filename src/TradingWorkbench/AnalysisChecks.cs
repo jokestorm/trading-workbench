@@ -25,7 +25,26 @@ public static class AnalysisChecks
         Check(service.Preview(new("journal",IncludeNotes:true)).Snapshot.GetRawText().Contains("Private note"),"notes are only included when requested");
         rejected=false;try{service.Preview(new("journal",new(Symbol:"UNKNOWN")));}catch(FormatException){rejected=true;}Check(rejected,"empty trade ranges do not request an analysis");
         rejected=false;try{CodexAnalysisProvider.Validate("{}");}catch(FormatException){rejected=true;}Check(rejected,"invalid AI results are rejected");
+        var signal=recommendation with{Decision=recommendation.Decision! with{Trend="UP"}};
+        Check(CodexAnalysisProvider.Validate(JsonSerializer.Serialize(signal,CodexAnalysisProvider.Json)).Decision?.Trend=="UP","market signal retains a validated trend direction");
+        rejected=false;try{CodexAnalysisProvider.Validate(JsonSerializer.Serialize(signal with{Decision=signal.Decision! with{Trend="GUARANTEED"}},CodexAnalysisProvider.Json));}catch(FormatException){rejected=true;}Check(rejected,"unknown trend labels cannot become market signals");
         Check(JsonSerializer.Serialize(AnalysisService.SampleMarket()).Contains("SYNTHETIC"),"sample market provenance is explicit");
+        foreach(var kind in new[]{"journal","market","synthetic"})
+        {
+            var snapshot=kind=="market"?DecisionSnapshot():JsonSerializer.SerializeToElement(new{kind});
+            var invocation=new CodexAnalysisProvider("fixture-codex",runProcess:async(start,input,token)=>
+            {
+                var arguments=start.ArgumentList.ToArray();
+                Check(arguments.Contains(kind=="market"?"web_search=\"live\"":"web_search=\"disabled\"")&&arguments.Contains("features.shell_tool=false")&&arguments.Contains("--ignore-user-config")&&arguments.Contains("--ignore-rules"),kind+" analysis enables only its intended research access while preserving CLI isolation");
+                Check(input!.Contains(kind=="journal"?"Review only the selected closed trades":"Provide a fast day-trading analysis"),kind+" receives its own analysis prompt");
+                var path=arguments[Array.IndexOf(arguments,"--output-last-message")+1];
+                await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new AnalysisResult("Fixture","Review",["Data"],["Sample"],["Review"],"Scope"),CodexAnalysisProvider.Json),token);
+                return (0,"model: fixture");
+            });
+            var runDirectory=Path.Combine(directory,"prompt-"+kind);Directory.CreateDirectory(runDirectory);
+            await invocation.Analyze(snapshot,runDirectory,CancellationToken.None);
+        }
+        Check(run.PromptVersion=="journal-review-v1"&&AnalysisPrompts.For(DecisionSnapshot()).TimeLimit==TimeSpan.FromSeconds(90),"saved results identify their separate prompt version and market runs have a 90-second execution limit");
         if(live){var provider=new CodexAnalysisProvider();Console.WriteLine(JsonSerializer.Serialize(await provider.Status()));var liveService=new AnalysisService(store,provider,Path.Combine(directory,"live"));var sample=liveService.Preview(new("sample-market"));var response=await liveService.Analyze(sample.Token,CancellationToken.None);Check(response.Result.Limitations.Length>0,"actual Codex ChatGPT analysis returns validated structured output");Console.WriteLine("Synthetic live test saved in "+directory);}
     }
     private sealed class FixtureProvider:IAnalysisProvider

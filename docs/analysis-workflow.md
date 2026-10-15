@@ -13,8 +13,13 @@
 - Market inputs retain the requested contract and manual position. Refresh must
   succeed before freezing observations. Journal filters and optional notes are
   resolved at admission, preserving the original closed-trade population.
-- Existing single-use snapshots, four-minute analysis timeout, freshness and
+- Existing single-use snapshots, freshness and
   position guards, structured results, history, and journal accounting remain.
+- Market analysis permits brief supplementary web research, with a prompt budget
+  of two searches/two page opens and roughly 20 seconds. Its hard execution timeout
+  is 90 seconds. Journal review has a separate snapshot-only prompt, web search
+  disabled, and a four-minute hard execution timeout. Research cannot override
+  frozen price observations or recommendation guards.
 
 ## Ownership
 
