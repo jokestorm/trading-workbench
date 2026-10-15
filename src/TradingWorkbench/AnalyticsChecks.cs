@@ -13,6 +13,7 @@ public static class AnalyticsChecks
             new TradeData{Id="c",Date="2026-10-02",Time="11:00",Symbol="AAPL",Setup="Pullback",AccountingGrossPnl=0,Fees=0,Risk=null}};
         JsonElement Summary(TradeData[] trades)=>JsonSerializer.SerializeToElement(Analytics.Calculate(trades));
         var result=Summary(new TradeFilter().Apply(input));
+        Check(result.GetProperty("curve").EnumerateArray().Select(p=>p.GetProperty("Time").GetString()).SequenceEqual(new[]{"10:00","10:00","11:00"}),"journal curve retains Eastern closing times for time-axis zoom");
         Check(result.GetProperty("net").GetDecimal()==35&&result.GetProperty("expectancy").GetDecimal()==35m/3&&result.GetProperty("breakEven").GetInt32()==1,"expectancy and win rate include break-even trades");
         Check(result.GetProperty("daily").EnumerateArray().Sum(d=>d.GetProperty("Net").GetDecimal())==35&&result.GetProperty("instruments").EnumerateArray().Sum(d=>d.GetProperty("Net").GetDecimal())==35,"daily and instrument breakdowns reconcile");
         Check(result.GetProperty("drawdown").GetDecimal()==55&&result.GetProperty("currentDrawdown").GetDecimal()==55,"drawdown starts from zero and tracks the realized peak");

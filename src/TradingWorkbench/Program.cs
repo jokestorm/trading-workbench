@@ -2,7 +2,8 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if(args.Contains("--codex-probe")){await CodexLoginChecks.Probe();return;}
 if(args.Contains("--ai-smoke")){await AnalysisChecks.Run(true);return;}
 if(args.Contains("--review-statement"))
 {
@@ -27,7 +28,8 @@ var app = builder.Build();
 var store = new TradeStore(app.Configuration["DataDirectory"] ?? Path.Combine(root, "data"));
 var imports = new ImportService(store);
 var schwab=new SchwabConnection(secretsDirectory,app.Services.GetRequiredService<IDataProtectionProvider>(),new HttpClient{Timeout=TimeSpan.FromSeconds(20)});
-var aiProvider=new CodexAnalysisProvider(builder.Configuration["CodexExecutable"]);
+var aiProvider=new CodexAnalysisProvider(builder.Configuration["CodexExecutable"],builder.Configuration["CodexHome"]);
+await using var codexLogin=new CodexLoginService(()=>new CodexLoginSession(aiProvider),aiProvider.Status,aiProvider.Logout,aiProvider.EnterOperation);
 var market=new MarketStore(app.Configuration["DataDirectory"]??Path.Combine(root,"data"));
 var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market);
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
@@ -48,6 +50,7 @@ app.MapGet("/api/status", () => new { stage = 5, aiPilot=true, storage = "SQLite
 SchwabRoutes.Map(app,schwab);
 MarketRoutes.Map(app,market,schwab);
 AnalysisService.Map(app,analysis,aiProvider);
+CodexLoginService.Map(app,codexLogin);
 app.MapGet("/api/analytics",(HttpRequest request)=>
 {
     try{return Results.Ok(Analytics.Calculate(TradeFilter.Read(request.Query).Apply(store.List())));}

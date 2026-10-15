@@ -12,7 +12,7 @@ export function summarize(trades) {
   const net = Math.round(values.reduce((a,b)=>a+b,0)*100)/100;
   const grossWins = winners.reduce((a,b)=>a+b,0), grossLosses = -losers.reduce((a,b)=>a+b,0);
   let running = 0, peak = 0, drawdown = 0;
-  const curve = trades.map((t,i) => { running = Math.round((running+values[i])*100)/100; peak=Math.max(peak,running); drawdown=Math.max(drawdown,peak-running); return {date:t.date,value:running,drawdown:peak-running}; });
+  const curve = trades.map((t,i) => { running = Math.round((running+values[i])*100)/100; peak=Math.max(peak,running); drawdown=Math.max(drawdown,peak-running); return {date:t.date,time:t.time,value:running,drawdown:peak-running}; });
   const average=items=>items.length?items.reduce((a,b)=>a+b,0)/items.length:null;
   const group=key=>[...new Set(trades.map(t=>t[key]))].map(value=>{const items=trades.filter(t=>t[key]===value),v=items.map(netPnl);return {key:value,count:items.length,net:Math.round(v.reduce((a,b)=>a+b,0)*100)/100,fees:items.reduce((s,t)=>s+t.fees,0),expectancy:average(v),winRate:v.filter(x=>x>0).length/items.length};});
   const r=trades.filter(t=>t.risk>0).map(t=>netPnl(t)/t.risk).sort((a,b)=>a-b);

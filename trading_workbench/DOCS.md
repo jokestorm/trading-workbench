@@ -36,13 +36,29 @@ Linux data-protection keys and Schwab settings require private filesystem access
 the startup script creates files with a restrictive umask. HA backups containing
 them must also be treated as private. Windows DPAPI files cannot be reused.
 
-## Staged availability
+## ChatGPT analysis (0.1.2 onward)
 
-The initial container includes the existing application, but does not yet install
-Codex CLI. The journal is the first installation test. Schwab routes remain in
-the source; reconnect and verify OAuth/quotes through ingress in the next stage.
-AI should report Codex unavailable until the later CLI/authentication stage.
-Do not enable unattended analysis or broker order submission.
+The container bundles Codex CLI 0.162.1 for ARM64. Open Market, expand **ChatGPT
+connection** under Market analysis, and choose **Sign in with ChatGPT**. Open
+the official OpenAI link on your phone or computer and enter the one-time code.
+Keep the app running until it shows **ChatGPT connected**. If device-code login
+is unavailable, enable it in your ChatGPT account's security settings first.
+
+Then select an instrument, enter your current position, and choose **Analyze**.
+Journal analysis shares the same login. Check connection, Cancel sign-in, and
+Sign out are available in the connection section. Analysis sends the selected
+snapshot to OpenAI using the ChatGPT account; it does not place broker orders.
+
+The app uses `/data/workbench/codex` for its own Codex credentials. This directory
+survives restarts and updates and is included in app backups. Codex manages token
+refresh. Its file credential cache is plaintext in private storage, so protect
+HA backups as well. No credentials are embedded in the image or Git repository.
+The desktop PC's login is not transferred. A pending sign-in must be restarted
+if the app restarts before authorization finishes.
+
+GitHub checks the bundled ARM64 CLI and local auth protocol without a real login
+or model call. First actual ChatGPT sign-in and inference on the Pi remain
+post-install checks; this is a personal app with manual analysis.
 
 ## Updating
 

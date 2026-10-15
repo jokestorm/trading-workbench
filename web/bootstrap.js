@@ -1,5 +1,5 @@
 try {
-  await import('./app.js?v=ha-0.1.1');
+  await import('./app.js?v=ha-0.1.2');
   function openSection(){
     if(location.hash==='#market')document.querySelector('[data-tab="market"]').click();
   }

@@ -23,7 +23,7 @@ export function pointsInWindow(points, window) {
 
 // Pointer capture keeps a drag active outside the SVG. Only the horizontal
 // interval changes; the renderer derives price limits from visible observations.
-export function bindChartNavigation(container, {getState, onWindow, onHover, onLeave}) {
+export function bindChartNavigation(container, {getState, onWindow, onHover, onLeave, onReset = () => {}}) {
   let drag = null;
   function location(event) {
     const {layout} = getState(), svg = container.querySelector('svg');
@@ -72,6 +72,12 @@ export function bindChartNavigation(container, {getState, onWindow, onHover, onL
   container.addEventListener('pointercancel', clearDrag);
   container.addEventListener('lostpointercapture', clearDrag);
   container.addEventListener('pointerleave', () => {if (!drag) onLeave();});
+  container.addEventListener('dblclick', event => {
+    if (!getState().bounds) return;
+    event.preventDefault();
+    clearDrag();
+    onReset();
+  });
   container.addEventListener('wheel', event => {
     if (drag) return;
     const position = location(event), {window, bounds} = getState();

@@ -41,10 +41,11 @@ tags publish an ARM64 container. Home Assistant pulls that version from the
 registry; releases do not compile on the Pi. See the installation instructions
 for runner and private registry requirements.
 
-First validate the journal/ingress installation, then Schwab, then Codex. The
-initial container does not install Codex CLI; its Linux authentication and
-sandbox integration are a later milestone. Existing integration source stays in
-the repository so each stage can extend the same app.
+The journal, ingress, and Schwab workflows have been verified on the Pi. Version
+0.1.2 bundles Codex CLI 0.162.1 with in-app ChatGPT device sign-in. Its connection
+and analysis need verification on the actual Pi after updating and signing in.
+Use **Market → ChatGPT connection → Sign in with ChatGPT**, open the official
+link, and enter the one-time code. No OpenAI API key is required.
 
 Databases, keys, authentication caches, runtime files, and the personal statement
 review are excluded from Git and container builds. Synthetic fixtures are tests

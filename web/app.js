@@ -1,10 +1,11 @@
 import { fetchApp, appUrl } from './http.js';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.1';
-import { mountImport } from './import.js?v=ha-0.1.1';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.1';
-import { mountMarket } from './market.js?v=ha-0.1.1';
-import { mountAI } from './ai.js?v=ha-0.1.1';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.1';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.2';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.2';
+import { mountImport } from './import.js?v=ha-0.1.2';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.2';
+import { mountMarket } from './market.js?v=ha-0.1.2';
+import { mountAI } from './ai.js?v=ha-0.1.2';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.2';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;
@@ -15,6 +16,7 @@ const escape = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 let trades = [], savedTrades = [], openPositions=[], selectedTrade = null, editingId = null, ready = false;
 let renderVersion=0;
 mountReports();
+const journalChart=mountJournalChart($('equity-chart'));
 mountMarket();
 mountMonitor();
 const reportStatus=document.createElement('div');reportStatus.id='report-status';reportStatus.setAttribute('role','status');$('filters').after(reportStatus);
@@ -55,17 +57,6 @@ for (const button of document.querySelectorAll('[data-tab]')) button.addEventLis
   document.querySelectorAll('[data-tab]').forEach(b=>{ b.classList.toggle('active',b===button); b.setAttribute('aria-current',b===button?'page':'false'); });
 });
 
-function chart(curve) {
-  if (!curve.length) return '<div class="empty">No trades in this range. Adjust your filters.</div>';
-  const width=740,height=220,left=62,right=18,top=15,bottom=35;
-  const values=[0,...curve.map(p=>p.value)];
-  let min=Math.min(...values),max=Math.max(...values); const span=Math.max(50,max-min); min-=span*.1; max+=span*.1;
-  const x=i=>left+i/(values.length-1)*(width-left-right), y=v=>top+(max-v)/(max-min)*(height-top-bottom);
-  const points=values.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
-  const ticks=Array.from({length:5},(_,i)=>min+(max-min)*i/4).map(v=>`<line x1="${left}" x2="${width-right}" y1="${y(v)}" y2="${y(v)}" stroke="#263143" stroke-dasharray="3 5"/><text x="${left-10}" y="${y(v)+4}" text-anchor="end" fill="#8191a9" font-size="10">${money(v).replace('.00','')}</text>`).join('');
-  const first=curve[0].date.slice(5).replace('-','/'),last=curve.at(-1).date.slice(5).replace('-','/');
-  return `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Cumulative realized net profit and loss, ending at ${escape(money(curve.at(-1).value))}"><defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#77d6b0" stop-opacity=".18"/><stop offset="1" stop-color="#77d6b0" stop-opacity="0"/></linearGradient></defs>${ticks}<line x1="${left}" x2="${width-right}" y1="${y(0)}" y2="${y(0)}" stroke="#53617a"/><polygon points="${left},${height-bottom} ${points} ${width-right},${height-bottom}" fill="url(#area)"/><polyline points="${points}" fill="none" stroke="#77d6b0" stroke-width="2.5" stroke-linejoin="round"/>${curve.map((p,i)=>`<circle cx="${x(i+1)}" cy="${y(p.value)}" r="3" fill="#77d6b0"><title>${p.date}: ${money(p.value)}</title></circle>`).join('')}<text x="${left}" y="${height-9}" fill="#8191a9" font-size="10">${first}</text><text x="${width-right}" y="${height-9}" text-anchor="end" fill="#8191a9" font-size="10">${last}</text></svg>`;
-}
 async function render() {
   const version=++renderVersion;
   const filters=Object.fromEntries(['start','end','account','symbol','direction','setup'].map(k=>[k,$(k).value]));
@@ -85,7 +76,7 @@ async function render() {
   positionsPanel.innerHTML=`<div class="panel-heading"><div><h2>Open positions · statement snapshot</h2><p>Excluded from closed-trade metrics. Latest imported statement; date filters do not change this snapshot.</p></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Instrument</th><th>Direction</th><th class="numeric">Qty</th><th class="numeric">Average entry</th><th class="numeric">Entry fees</th></tr></thead><tbody>${positions.map(p=>`<tr><td>${escape(p.account)}</td><td>${escape(p.symbol)}</td><td>${p.quantity>0?'LONG':'SHORT'}</td><td class="numeric">${Math.abs(p.quantity)}</td><td class="numeric">${number(p.averageEntry)}</td><td class="numeric">${money(p.entryFees)}</td></tr>`).join('')}</tbody></table></div>`;
   const cards=[['Net P/L',money(summary.net,true),`${summary.count} closed trades · ${money(summary.fees)} fees`,tone(summary.net)],['Win rate',summary.winRate===null?'—':`${(summary.winRate*100).toFixed(1)}%`,`${summary.wins} wins / ${summary.losses} losses / ${summary.breakEven} flat`,''],['Expectancy',summary.expectancy===null?'—':money(summary.expectancy,true),'Average net P/L per trade',summary.expectancy===null?'':tone(summary.expectancy)],['Max drawdown',money(summary.drawdown),'Selected realized P/L curve','']];
   $('metrics').innerHTML=cards.map(([label,value,caption,color])=>`<article class="metric"><div class="metric-label">${label}</div><div class="metric-value ${color}">${value}</div><div class="metric-caption">${caption}</div></article>`).join('');
-  $('equity-chart').innerHTML=chart(summary.curve); $('chart-count').textContent=`${summary.count} trades`; $('trade-count').textContent=summary.count;
+  journalChart.update(summary.curve,query.toString()); $('chart-count').textContent=`${summary.count} trades`; $('trade-count').textContent=summary.count;
   renderReports(summary);
   $('trade-rows').innerHTML=selected.length?[...selected].reverse().map(t=>`<tr><td class="date-cell">${t.date.slice(0,10)}<small>${t.time}</small></td><td><strong>${escape(t.symbol)}</strong></td><td><span class="direction ${t.direction==='SHORT'?'short':''}">${t.direction}</span></td><td class="setup-tag">${escape(t.setup)}</td><td class="numeric">${t.quantity}</td><td class="numeric">${number(t.entry)}</td><td class="numeric">${number(t.exit)}</td><td class="numeric muted">${money(t.fees)}</td><td class="numeric ${tone(netPnl(t))}">${money(netPnl(t),true)}</td><td><button class="detail-button" data-trade="${t.id}" aria-label="Review ${escape(t.symbol)} trade on ${t.date} at ${t.time}">↗</button></td></tr>`).join(''):`<tr><td colspan="10" class="empty">${savedTrades.length===0?'Your journal is empty. Import a statement or add your first completed trade.':'No matching trades. Try another date range or reset the filters.'}</td></tr>`;
 }

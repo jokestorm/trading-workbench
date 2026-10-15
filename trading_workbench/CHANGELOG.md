@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.2
+
+- Bundle Codex CLI 0.162.1 for ARM64 and add Sign in with ChatGPT using a device
+  code, cancellation, connection checks, and sign-out inside the app.
+- Keep the app's Codex login in persistent private storage across restarts.
+- Verify the bundled auth transport in CI without credentials or model usage.
+- Double-click the market chart to restore its default recent-data zoom.
+- Add drag selection, pointer-centered scroll zoom, zoom buttons, and double-click
+  reset to the journal cumulative P/L graph.
+- Plot journal closing times on the time axis and keep cumulative balances intact
+  while zooming. The vertical axis follows the visible balance range.
+
 ## 0.1.1
 
 - Restore opening fills from saved overlapping statements when a rolling export

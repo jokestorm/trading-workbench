@@ -11,9 +11,17 @@ public record AnalysisPreview(string Token,string Kind,DateTimeOffset ExpiresAt,
 public record AnalysisResult(string Summary,string Assessment,string[] Evidence,string[] Limitations,string[] NextSteps,string Invalidation,TradeDecision? Decision=null);
 public record AnalysisRun(string Id,string Kind,DateTimeOffset CreatedAt,string Provider,string Model,string PromptVersion,JsonElement Snapshot,AnalysisResult Result);
 public interface IAnalysisProvider { Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token); }
+public record CodexStatus(bool Installed,bool SubscriptionLogin,string Message);
 
-public sealed class CodexAnalysisProvider(string? executable=null):IAnalysisProvider
+public sealed class CodexAnalysisProvider(string? executable=null,string? home=null):IAnalysisProvider
 {
+    private readonly SemaphoreSlim operation=new(1,1);
+    public IDisposable EnterOperation()
+    {
+        if(!operation.Wait(0))throw new FormatException("AI is busy signing in or analyzing. Wait for it to finish.");
+        return new OperationLease(operation);
+    }
+    private sealed class OperationLease(SemaphoreSlim gate):IDisposable{public void Dispose()=>gate.Release();}
     public string Model {get;private set;}="CLI default";
     public static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web){WriteIndented=true};
     public const string PromptVersion="decision-v2";
@@ -26,19 +34,29 @@ public sealed class CodexAnalysisProvider(string? executable=null):IAnalysisProv
         try{if(input is not null){await process.StandardInput.WriteAsync(input.AsMemory(),token);process.StandardInput.Close();}await process.WaitForExitAsync(token);var errorOutput=await stderr;return(process.ExitCode,(await stdout)+errorOutput);}
         catch(OperationCanceledException){if(!process.HasExited)process.Kill(true);await process.WaitForExitAsync();throw;}
     }
-    private ProcessStartInfo Start(params string[] arguments)
+    internal ProcessStartInfo Start(params string[] arguments)
     {
         var start=new ProcessStartInfo(executable??FindExecutable()??throw new FormatException("Codex CLI was not found on PATH. Restart after installing it.")){UseShellExecute=false,CreateNoWindow=true,RedirectStandardInput=true,RedirectStandardOutput=true,RedirectStandardError=true};
-        start.Environment.Remove("OPENAI_API_KEY");
+        foreach(var key in new[]{"OPENAI_API_KEY","CODEX_API_KEY","CODEX_ACCESS_TOKEN"})start.Environment.Remove(key);
+        if(!string.IsNullOrWhiteSpace(home))
+        {
+            var directory=Path.GetFullPath(home);Directory.CreateDirectory(directory);
+            start.Environment["CODEX_HOME"]=directory;start.WorkingDirectory=directory;
+            start.ArgumentList.Add("-c");start.ArgumentList.Add("cli_auth_credentials_store=\"file\"");
+        }
+        start.ArgumentList.Add("-c");start.ArgumentList.Add("forced_login_method=\"chatgpt\"");
+        start.ArgumentList.Add("-c");start.ArgumentList.Add("model_provider=\"openai\"");
         foreach(var argument in arguments)start.ArgumentList.Add(argument);return start;
     }
-    public async Task<object> Status()
+    public async Task<CodexStatus> Status()
     {
-        try {using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));var result=await RunProcess(Start("-c","forced_login_method=\"chatgpt\"","login","status"),null,timeout.Token);return new{installed=true,subscriptionLogin=result.Exit==0&&result.Output.Contains("ChatGPT",StringComparison.OrdinalIgnoreCase),message=result.Exit==0?"Codex CLI checked. Analysis uses ChatGPT login.":"Sign in with ChatGPT using codex login, then check again."};}
-        catch(Exception error) when(error is FormatException or OperationCanceledException){return new{installed=executable is not null||FindExecutable() is not null,subscriptionLogin=false,message="Could not verify Codex ChatGPT login. Run codex login in your terminal and check again."};}
+        try {using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));var result=await RunProcess(Start("login","status"),null,timeout.Token);var connected=result.Exit==0&&result.Output.Contains("ChatGPT",StringComparison.OrdinalIgnoreCase);return new(true,connected,connected?"ChatGPT connected.":"Sign in with ChatGPT to enable analysis.");}
+        catch(Exception error) when(error is FormatException or OperationCanceledException){return new(executable is not null||FindExecutable() is not null,false,"Codex is unavailable. Install the latest Trading Workbench app update, then check again.");}
     }
+    public async Task Logout(){using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));var result=await RunProcess(Start("logout"),null,timeout.Token);if(result.Exit!=0)throw new FormatException("Could not sign out of Codex. Try again.");}
     public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token)
     {
+        using var lease=EnterOperation();
         var schemaPath=Path.Combine(directory,"schema.json");var resultPath=Path.Combine(directory,"result.json");
         var schema=new JsonObject{["type"]="object",["additionalProperties"]=false};var properties=new JsonObject();
         foreach(var key in new[]{"summary","assessment","invalidation"})properties[key]=new JsonObject{["type"]="string"};

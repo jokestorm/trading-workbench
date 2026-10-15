@@ -15,7 +15,10 @@ public record TradeFilter(string? Start=null,string? End=null,string? Account=nu
             .OrderBy(t=>t.Date).ThenBy(t=>t.Time).ThenBy(t=>t.Id).ToArray();
     }
 }
-public record CurvePoint(string Date,decimal Value,decimal Drawdown);
+public record CurvePoint(string Date,decimal Value,decimal Drawdown)
+{
+    public string Time {get;init;}="";
+}
 public record Breakdown(string Key,int Count,decimal Net,decimal Fees,decimal Expectancy,decimal WinRate);
 public record DistributionBucket(string Label,string Range,int Count,string Kind);
 public static class Analytics
@@ -24,7 +27,7 @@ public static class Analytics
     {
         var values=trades.Select(t=>t.NetPnl).ToArray();var winners=values.Where(v=>v>0).ToArray();var losers=values.Where(v=>v<0).ToArray();
         var net=values.Sum();var profits=winners.Sum();var losses=-losers.Sum();decimal running=0,peak=0,maxDrawdown=0;
-        var curve=trades.Select(t=>{running+=t.NetPnl;peak=Math.Max(peak,running);var dd=peak-running;maxDrawdown=Math.Max(maxDrawdown,dd);return new CurvePoint(t.Date,running,dd);}).ToArray();
+        var curve=trades.Select(t=>{running+=t.NetPnl;peak=Math.Max(peak,running);var dd=peak-running;maxDrawdown=Math.Max(maxDrawdown,dd);return new CurvePoint(t.Date,running,dd){Time=t.Time};}).ToArray();
         Breakdown[] Group(Func<TradeData,string> key)=>trades.GroupBy(key).Select(g=>new Breakdown(g.Key,g.Count(),g.Sum(t=>t.NetPnl),g.Sum(t=>t.Fees),g.Average(t=>t.NetPnl),(decimal)g.Count(t=>t.NetPnl>0)/g.Count())).ToArray();
         var r=trades.Where(t=>t.Risk>0).Select(t=>t.NetPnl/t.Risk!.Value).Order().ToArray();
         decimal? medianR=r.Length==0?null:r.Length%2==1?r[r.Length/2]:(r[r.Length/2-1]+r[r.Length/2])/2;

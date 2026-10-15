@@ -119,7 +119,10 @@ Drag horizontally across the price plot to select a time interval. Scroll over
 the plot to zoom around the pointer. Only the time axis is selected; prices
 rescale automatically from observations inside the visible interval. Zoom buttons
 remain available, and **Full range** restores all loaded history. Zooming uses
-cached observations and does not call Schwab. Changing instrument, data source,
+cached observations and does not call Schwab. Double-click restores the market
+chart to its default recent-data zoom. The journal cumulative P/L graph supports
+the same gestures and resets to its full filtered range. Zooming preserves its
+carried cumulative balance and leaves totals and filters unchanged. Changing instrument, data source,
 or history range resets the view. Historical gaps remain unfilled.
 
 ## Position-aware day-trading recommendations
