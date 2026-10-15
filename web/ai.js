@@ -1,7 +1,7 @@
 import { fetchApp } from './http.js';
-import {renderMarketSignal} from './market-signal.js?v=ha-0.1.6';
-import {createAnalysisRuns,activeRun} from './analysis-runs.js?v=ha-0.1.6';
-import { mountCodexLogin } from './codex-login.js?v=ha-0.1.6';
+import {renderMarketSignal} from './market-signal.js?v=ha-0.1.7';
+import {createAnalysisRuns,activeRun} from './analysis-runs.js?v=ha-0.1.7';
+import { mountCodexLogin } from './codex-login.js?v=ha-0.1.7';
 import { mountOutcomes } from './outcomes.js?v=decisions-2';
 const $=id=>document.getElementById(id);
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));

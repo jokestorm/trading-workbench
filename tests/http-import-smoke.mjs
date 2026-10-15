@@ -9,7 +9,7 @@ const preview=await post('/api/imports/preview',request);assert.equal(preview.st
 assert.equal((await (await fetch(base+'/api/trades')).json()).length,initial.length);
 const committed=await post('/api/imports/commit',{token:preview.body.token});assert.equal(committed.status,200);assert.equal(committed.body.imported,2);
 const trade=preview.body.trades[0].trade;
-const edited=await fetch(base+'/api/trades/'+trade.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({setup:'Reviewed',notes:'Preserve on reimport',risk:50,entry:1,exit:999})});assert.equal(edited.status,200);const after=await edited.json();assert.equal(after.netPnl,59);assert.equal(after.notes,'Preserve on reimport');
+const edited=await fetch(base+'/api/trades/'+trade.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({notes:'Preserve on reimport',risk:50,entry:1,exit:999})});assert.equal(edited.status,200);const after=await edited.json();assert.equal(after.netPnl,59);assert.equal(after.notes,'Preserve on reimport');
 const repeated=await post('/api/imports/preview',request);assert.equal(repeated.body.duplicates,2);assert.equal(repeated.body.trades.length,0);assert.equal((await post('/api/imports/commit',{token:repeated.body.token})).status,200);
 const all=await (await fetch(base+'/api/trades')).json();assert.equal(all.length,initial.length+2);assert.equal(all.find(t=>t.id===trade.id).notes,'Preserve on reimport');
 const fills=await (await fetch(base+'/api/trades/'+trade.id+'/fills')).json();assert.equal(fills.length,4);assert.equal(fills.reduce((s,f)=>s+f.execution.fees,0),6);

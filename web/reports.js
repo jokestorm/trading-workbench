@@ -5,7 +5,7 @@ const empty='<p class="small muted">No matching closed trades.</p>';
 function bars(items,distribution=false) {
   const scale=Math.max(1,...items.map(g=>Math.abs(distribution?g.count:g.net)));
   return items.map(g=>{const value=distribution?g.count:g.net,color=distribution?(g.kind==='loss'?'var(--red)':g.kind==='win'?'var(--green)':'var(--muted)'):value<0?'var(--red)':'var(--green)';
-    return `<div class="setup-row" title="${escape(distribution?g.range:`${g.key}: ${g.count} trades · fees ${money(g.fees)}`)}"><div class="setup-row-head"><span>${escape(distribution?g.label:g.key)}${distribution?'':` <small class="muted">· ${g.count}</small>`}</span><span class="${distribution?'':tone(value)}">${distribution?value:money(value)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${Math.abs(value)/scale*100}%;background:${color}"></div></div></div>`;}).join('');
+    return `<div class="breakdown-row" title="${escape(distribution?g.range:`${g.key}: ${g.count} trades · fees ${money(g.fees)}`)}"><div class="breakdown-row-head"><span>${escape(distribution?g.label:g.key)}${distribution?'':` <small class="muted">· ${g.count}</small>`}</span><span class="${distribution?'':tone(value)}">${distribution?value:money(value)}</span></div><div class="bar-track"><div class="bar-fill" style="width:${Math.abs(value)/scale*100}%;background:${color}"></div></div></div>`;}).join('');
 }
 export function mountReports() {
   const section=document.createElement('section');section.className='reports';section.setAttribute('aria-label','Selected range reports');
@@ -19,5 +19,4 @@ export function renderReports(s) {
   document.getElementById('daily-report').innerHTML=s.count?bars(s.daily):empty;
   document.getElementById('instrument-report').innerHTML=s.count?bars(s.instruments):empty;
   document.getElementById('distribution-report').innerHTML=s.count?bars(s.distribution,true):empty;
-  document.getElementById('setup-chart').innerHTML=s.count?bars(s.setups):empty;
 }

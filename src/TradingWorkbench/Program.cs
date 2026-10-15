@@ -89,7 +89,7 @@ app.MapPut("/api/trades/{id}", (string id, TradeData input) =>
 {
     var existing=store.List().FirstOrDefault(t=>t.Id==id);
     if (existing is null) return Results.NotFound();
-    var candidate=existing.Source=="CSV"?existing with{Notes=input.Notes??"",Risk=input.Risk,Setup=input.Setup}:input with{Account=existing.Account,Source="Manual",AccountingGrossPnl=null};
+    var candidate=existing.Source=="CSV"?existing with{Notes=input.Notes??"",Risk=input.Risk}:input with{Account=existing.Account,Source="Manual",AccountingGrossPnl=null};
     var errors = candidate.Validate();
     if (errors.Count > 0) return Results.ValidationProblem(errors);
     var trade = candidate with { Id = id, Symbol = candidate.Symbol.Trim().ToUpperInvariant(), Notes = (candidate.Notes ?? "").Trim() };

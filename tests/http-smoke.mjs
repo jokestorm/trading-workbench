@@ -1,7 +1,7 @@
 // Run against an isolated database, never against the personal journal.
 import assert from 'node:assert/strict';
 const base='http://127.0.0.1:5174';
-const input={symbol:'MESZ26',assetType:'Futures',openedAt:'2026-10-06T09:30',date:'2026-10-06',time:'10:00',direction:'LONG',quantity:2,entry:6000,exit:6004,multiplier:5,fees:3.24,risk:null,setup:'Pullback',notes:'API fixture'};
+const input={symbol:'MESZ26',assetType:'Futures',openedAt:'2026-10-06T09:30',date:'2026-10-06',time:'10:00',direction:'LONG',quantity:2,entry:6000,exit:6004,multiplier:5,fees:3.24,risk:null,notes:'API fixture'};
 const headers={'Content-Type':'application/json'};
 for(const asset of ['/','/app.js','/journal.css'])assert.equal((await fetch(base+asset)).status,200);
 const created=await fetch(base+'/api/trades',{method:'POST',headers,body:JSON.stringify(input)});assert.equal(created.status,201);

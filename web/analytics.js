@@ -3,8 +3,7 @@
 export const netPnl = t => Number.isFinite(t.netPnl) ? t.netPnl : Math.round(((t.exit-t.entry)*(t.direction === 'LONG' ? 1 : -1)*t.quantity*t.multiplier-t.fees)*100)/100;
 export function filterTrades(trades, filters) {
   return trades.filter(t => (!filters.start || t.date >= filters.start) && (!filters.end || t.date <= filters.end)
-    && (!filters.account || (t.account??'Personal')===filters.account) && (!filters.symbol || t.symbol === filters.symbol) && (!filters.direction || t.direction === filters.direction)
-    && (!filters.setup || t.setup === filters.setup)).sort((a,b) => `${a.date} ${a.time} ${a.id}`.localeCompare(`${b.date} ${b.time} ${b.id}`));
+    && (!filters.account || (t.account??'Personal')===filters.account) && (!filters.symbol || t.symbol === filters.symbol) && (!filters.direction || t.direction === filters.direction)).sort((a,b) => `${a.date} ${a.time} ${a.id}`.localeCompare(`${b.date} ${b.time} ${b.id}`));
 }
 export function summarize(trades) {
   const values = trades.map(netPnl);
@@ -23,7 +22,7 @@ export function summarize(trades) {
     expectancy:trades.length ? net/trades.length : null, profitFactor:grossLosses ? grossWins/grossLosses : null,
     fees:trades.reduce((s,t)=>s+t.fees,0), drawdown, currentDrawdown:peak-running, curve,breakEven:values.filter(v=>v===0).length,
     averageWinner:average(winners),averageLoser:average(losers),profitFactorIsInfinite:!grossLosses&&grossWins>0,
-    daily:group('date').sort((a,b)=>a.key.localeCompare(b.key)),instruments:group('symbol').sort((a,b)=>b.net-a.net),setups:group('setup').sort((a,b)=>b.net-a.net),
+    daily:group('date').sort((a,b)=>a.key.localeCompare(b.key)),instruments:group('symbol').sort((a,b)=>b.net-a.net),
     distribution:labels.map((label,i)=>({label,range:ranges[i],count:counts[i],kind:i<4?'loss':i===4?'flat':'win'})),
     riskCount:r.length,riskCoverage:trades.length?r.length/trades.length:null,totalR:r.length?r.reduce((a,b)=>a+b,0):null,averageR:average(r),medianR:r.length?(r[Math.floor((r.length-1)/2)]+r[Math.floor(r.length/2)])/2:null };
 }

@@ -25,8 +25,8 @@ node --test tests/analytics.test.mjs
 ## Current scope
 
 - My trades: add and edit completed single-entry/single-exit trades, including notes, optional planned risk, and total fees.
-- Inclusive closed-date, account, instrument, direction, and setup filtering. Today, yesterday, Monday-based week, month-to-date and last 30 days use Eastern dates.
-- Net P/L, win rate, expectancy, equity curve, maximum/current dollar drawdown, daily P/L, instrument/setup breakdowns, fixed-dollar P/L distribution, and trade details.
+- Inclusive closed-date, account, instrument, and direction filtering. Today, yesterday, Monday-based week, month-to-date and last 30 days use Eastern dates.
+- Net P/L, win rate, expectancy, equity curve, maximum/current dollar drawdown, daily P/L, instrument breakdowns, fixed-dollar P/L distribution, and trade details.
 - Profit factor, average winner/loser and mean/median R with visible recorded-risk coverage. Break-even trades count toward win rate and expectancy. Missing risk is excluded from R statistics; no losses with positive wins displays infinite profit factor.
 - Export filtered closed trades to CSV with authoritative gross/net P/L, fees, risk, R and notes. Numeric columns retain their values; text resembling spreadsheet formulas is escaped. The CSV is a report, not an execution-import format.
 - Decimal accounting on the .NET backend; saved-trade P/L is authoritative.
@@ -34,7 +34,7 @@ node --test tests/analytics.test.mjs
 - A downloadable SQLite backup.
 - Execution CSV import with explicit column mapping, read-only preview, validation, duplicate detection, and atomic commit.
 - Flat-to-flat grouping for long/short trades, scaling, partial exits, and reversals with proportional fee allocation.
-- Account filter and allocated-fill detail view. Imported accounting is read-only; notes, setup, and planned risk remain editable.
+- Account filter and allocated-fill detail view. Imported accounting is read-only; notes and planned risk remain editable.
 
 No broker trade synchronization yet. On-demand AI review uses Codex CLI with ChatGPT login. Schwab quotes and price history require successful authorization. This stage assumes USD. Manual dates/times are Eastern local time; imported executions retain seconds when supplied. Point values are configurable on each manual trade. Imported dated contracts recognized by the catalog must match its type and multiplier. Manual fees are the total round-trip amount; CSV fees are per execution. Generic CSV imports still require completed flat-to-flat positions. Recognized statements can save separate open snapshots when their holdings and cash ledger reconcile.
 

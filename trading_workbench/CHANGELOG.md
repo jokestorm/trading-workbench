@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.7
+
+- Remove journal setup tags from forms, filters, trade details, breakdowns, CSV
+  exports, and portfolio analysis. Older saved trades remain readable; notes,
+  risk, fills, and P/L retain their existing behavior.
+- Make market analysis a decisive intraday trade call for minutes-to-hours holds:
+  one NOW setup with entry/stop/target, or a conditional NEXT trigger with an
+  expiry. Preserve position, data-freshness, and price-level checks. Record
+  market prompt version v6; journal review v2 omits setup categories.
+
 ## 0.1.6
 
 - Fix Market Analyze and manual position changes after moving the position form

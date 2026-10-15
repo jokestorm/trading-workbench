@@ -6,7 +6,7 @@ const post=(path,body,extra={})=>fetch(base+path,{method:'POST',headers:{...head
 let response=await fetch(base+'/api/ai/runs/current');
 assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');assert.deepEqual(await response.json(),{run:null});
 assert.equal((await post('/api/ai/runs',{kind:'journal'})).status,400);
-const trade={symbol:'MESZ26',assetType:'Futures',openedAt:'2026-10-06T09:30',date:'2026-10-06',time:'10:00',direction:'LONG',quantity:1,entry:100,exit:101,multiplier:5,fees:0,setup:'Fixture',notes:''};
+const trade={symbol:'MESZ26',assetType:'Futures',openedAt:'2026-10-06T09:30',date:'2026-10-06',time:'10:00',direction:'LONG',quantity:1,entry:100,exit:101,multiplier:5,fees:0,notes:''};
 assert.equal((await post('/api/trades',trade)).status,201);
 response=await post('/api/ai/runs',{kind:'journal'});assert.equal(response.status,202);const admitted=await response.json();assert.equal(admitted.kind,'journal');
 let run;

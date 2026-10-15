@@ -27,7 +27,6 @@ public record TradeData
     public decimal Multiplier { get; init; } = 1m;
     public decimal Fees { get; init; }
     public decimal? Risk { get; init; }
-    public string Setup { get; init; } = "Other";
     public string Notes { get; init; } = "";
     public decimal GrossPnl => AccountingGrossPnl ?? (Exit - Entry) * (Direction == "LONG" ? 1m : -1m) * Quantity * Multiplier;
     public decimal NetPnl => decimal.Round(GrossPnl - Fees, 2, MidpointRounding.AwayFromZero);
@@ -48,7 +47,6 @@ public record TradeData
         var closeValid = DateTime.TryParseExact($"{Date}T{Time}", timeFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var close);
         var openValid = DateTime.TryParseExact(OpenedAt, timeFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var open);
         if (!closeValid || !openValid || open > close || open.Year < 2000 || close.Year > 2100) Error("time", "Enter valid opening and closing times between 2000 and 2100; close must follow entry.");
-        if (string.IsNullOrWhiteSpace(Setup) || Setup.Length > 60) Error("setup", "Setup is required and must be at most 60 characters.");
         if (Notes?.Length > 10_000) Error("notes", "Notes must be at most 10,000 characters.");
         return errors;
     }

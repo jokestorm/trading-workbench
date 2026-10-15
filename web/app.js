@@ -1,11 +1,11 @@
 import { fetchApp, appUrl } from './http.js';
-import { mountJournalChart } from './journal-chart.js?v=ha-0.1.6';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.6';
-import { mountImport } from './import.js?v=ha-0.1.6';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.6';
-import { mountMarket } from './market.js?v=ha-0.1.6';
-import { mountAI } from './ai.js?v=ha-0.1.6';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.6';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.7';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.7';
+import { mountImport } from './import.js?v=ha-0.1.7';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.7';
+import { mountMarket } from './market.js?v=ha-0.1.7';
+import { mountAI } from './ai.js?v=ha-0.1.7';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.7';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;
@@ -27,12 +27,12 @@ const positionsPanel=document.createElement('article');positionsPanel.className=
 const accountLabel=document.createElement('label');accountLabel.textContent='Account';
 const accountSelect=document.createElement('select');accountSelect.id='account';accountLabel.append(accountSelect);
 $('symbol').closest('label').before(accountLabel);
-mountAI({getFilters:()=>Object.fromEntries(['start','end','account','symbol','direction','setup'].map(k=>[k,$(k).value]))});
+mountAI({getFilters:()=>Object.fromEntries(['start','end','account','symbol','direction'].map(k=>[k,$(k).value]))});
 mountImport({onImported:async()=>{await loadSaved();resetFilters();}});
 function refreshOptions() {
-  for(const [id,key,title] of [['account','account','All accounts'],['symbol','symbol','All instruments'],['setup','setup','All setups']]) {
+  for(const [id,key,title] of [['account','account','All accounts'],['symbol','symbol','All instruments']]) {
     const previous=$(id).value; $(id).replaceChildren(new Option(title,''));
-    const records=key==='setup'?trades:[...trades,...openPositions];
+    const records=[...trades,...openPositions];
     for(const value of [...new Set(records.map(t=>t[key]??'Personal'))].sort()) $(id).add(new Option(value,value));
     if([...$(id).options].some(o=>o.value===previous))$(id).value=previous;
   }
@@ -48,7 +48,7 @@ function resetFilters() {
   document.querySelector('header .demo-badge').textContent='MY TRADES';
   document.querySelector('.sidebar-bottom .small').textContent='Stored on this computer';
   $('period').value='all';$('start').value='';$('end').value='';
-  for(const id of ['account','symbol','direction','setup'])$(id).value='';refreshOptions();render();
+  for(const id of ['account','symbol','direction'])$(id).value='';refreshOptions();render();
 }
 for (const button of document.querySelectorAll('[data-tab]')) button.addEventListener('click',()=>{
   const tab = button.dataset.tab; location.hash=tab; document.querySelector('header .demo-badge').textContent=tab==='market'?'MARKET':'MY TRADES';
@@ -59,7 +59,7 @@ for (const button of document.querySelectorAll('[data-tab]')) button.addEventLis
 
 async function render() {
   const version=++renderVersion;
-  const filters=Object.fromEntries(['start','end','account','symbol','direction','setup'].map(k=>[k,$(k).value]));
+  const filters=Object.fromEntries(['start','end','account','symbol','direction'].map(k=>[k,$(k).value]));
   const invalid=filters.start && filters.end && filters.start>filters.end;
   $('filter-error').textContent=invalid?'The start date must be on or before the end date.':'';
   const selected=invalid?[]:filterTrades(trades,filters);let summary=summarize(selected);
@@ -78,16 +78,16 @@ async function render() {
   $('metrics').innerHTML=cards.map(([label,value,caption,color])=>`<article class="metric"><div class="metric-label">${label}</div><div class="metric-value ${color}">${value}</div><div class="metric-caption">${caption}</div></article>`).join('');
   journalChart.update(summary.curve,query.toString()); $('chart-count').textContent=`${summary.count} trades`; $('trade-count').textContent=summary.count;
   renderReports(summary);
-  $('trade-rows').innerHTML=selected.length?[...selected].reverse().map(t=>`<tr><td class="date-cell">${t.date.slice(0,10)}<small>${t.time}</small></td><td><strong>${escape(t.symbol)}</strong></td><td><span class="direction ${t.direction==='SHORT'?'short':''}">${t.direction}</span></td><td class="setup-tag">${escape(t.setup)}</td><td class="numeric">${t.quantity}</td><td class="numeric">${number(t.entry)}</td><td class="numeric">${number(t.exit)}</td><td class="numeric muted">${money(t.fees)}</td><td class="numeric ${tone(netPnl(t))}">${money(netPnl(t),true)}</td><td><button class="detail-button" data-trade="${t.id}" aria-label="Review ${escape(t.symbol)} trade on ${t.date} at ${t.time}">↗</button></td></tr>`).join(''):`<tr><td colspan="10" class="empty">${savedTrades.length===0?'Your journal is empty. Import a statement or add your first completed trade.':'No matching trades. Try another date range or reset the filters.'}</td></tr>`;
+  $('trade-rows').innerHTML=selected.length?[...selected].reverse().map(t=>`<tr><td class="date-cell">${t.date.slice(0,10)}<small>${t.time}</small></td><td><strong>${escape(t.symbol)}</strong></td><td><span class="direction ${t.direction==='SHORT'?'short':''}">${t.direction}</span></td><td class="numeric">${t.quantity}</td><td class="numeric">${number(t.entry)}</td><td class="numeric">${number(t.exit)}</td><td class="numeric muted">${money(t.fees)}</td><td class="numeric ${tone(netPnl(t))}">${money(netPnl(t),true)}</td><td><button class="detail-button" data-trade="${t.id}" aria-label="Review ${escape(t.symbol)} trade on ${t.date} at ${t.time}">↗</button></td></tr>`).join(''):`<tr><td colspan="9" class="empty">${savedTrades.length===0?'Your journal is empty. Import a statement or add your first completed trade.':'No matching trades. Try another date range or reset the filters.'}</td></tr>`;
 }
 $('filters').addEventListener('submit',e=>e.preventDefault());
-for (const id of ['start','end','account','symbol','direction','setup']) $(id).addEventListener('change',()=>{if(id==='start'||id==='end')$('period').value='custom';render();});
+for (const id of ['start','end','account','symbol','direction']) $(id).addEventListener('change',()=>{if(id==='start'||id==='end')$('period').value='custom';render();});
 $('period').addEventListener('change',()=>{ const anchor=easternToday();const dates=dateRange($('period').value,anchor);if(dates){[$('start').value,$('end').value]=dates;render();} });
 $('reset').addEventListener('click',()=>resetFilters());
 $('trade-rows').addEventListener('click',async e=>{ const button=e.target.closest('[data-trade]');if(!button)return; const t=trades.find(t=>t.id===button.dataset.trade);
   selectedTrade=t;$('edit-trade').hidden=false;$('detail-mode').textContent=`${t.source??'Manual'} · ${t.account??'Personal'}`;
   $('edit-trade').textContent=t.source==='CSV'?'Edit journal notes':'Edit trade';
-  $('trade-detail').innerHTML=`<h1>${escape(t.symbol)}</h1><p>${t.date} · ${t.time} ET · ${t.direction} · ${escape(t.setup)}</p><div class="metric-value ${tone(netPnl(t))}">${money(netPnl(t),true)}</div><div class="detail-grid">${[['Quantity',t.quantity],['Fees',money(t.fees)],['Entry',number(t.entry)],['Exit',number(t.exit)],['Planned risk',t.risk?money(t.risk):'Not recorded'],['Net R',t.risk?(netPnl(t)/t.risk).toFixed(2)+'R':'Not available']].map(([k,v])=>`<div><small>${k}</small>${escape(v)}</div>`).join('')}</div><p class="trade-note">${escape(t.notes)}</p>`; $('trade-dialog').showModal();
+  $('trade-detail').innerHTML=`<h1>${escape(t.symbol)}</h1><p>${t.date} · ${t.time} ET · ${t.direction}</p><div class="metric-value ${tone(netPnl(t))}">${money(netPnl(t),true)}</div><div class="detail-grid">${[['Quantity',t.quantity],['Fees',money(t.fees)],['Entry',number(t.entry)],['Exit',number(t.exit)],['Planned risk',t.risk?money(t.risk):'Not recorded'],['Net R',t.risk?(netPnl(t)/t.risk).toFixed(2)+'R':'Not available']].map(([k,v])=>`<div><small>${k}</small>${escape(v)}</div>`).join('')}</div><p class="trade-note">${escape(t.notes)}</p>`; $('trade-dialog').showModal();
   {const section=document.createElement('div');section.className='fills-preview';section.textContent='Loading allocated fills…';$('trade-detail').append(section);try{const response=await fetchApp(`/api/trades/${t.id}/fills`);if(!response.ok)throw new Error();const fills=await response.json();section.innerHTML=`<h2>Allocated fills</h2><div class="table-wrap"><table><thead><tr><th>Role</th><th>Time ET</th><th class="numeric">Qty</th><th class="numeric">Price</th><th class="numeric">Fees</th></tr></thead><tbody>${fills.map(({role,execution:f})=>`<tr><td>${escape(role)}${f.externalId?.startsWith('tos:cash-settlement:')?' · Cash settlement':''}</td><td>${escape((f.timestamp??f.localTimeEastern??'').replace('T',' '))}</td><td class="numeric">${number(f.quantity)}</td><td class="numeric">${number(f.price)}</td><td class="numeric">${money(f.fees)}</td></tr>`).join('')}</tbody></table></div>${t.source==='CSV'?'<p class="small muted">A reversal execution may be split across two trades. Accounting comes from the allocated fills; average prices are for display.</p>':''}`;}catch{section.textContent='Could not load fills.';}}
 });
 $('close-dialog').addEventListener('click',()=>$('trade-dialog').close());
@@ -97,7 +97,7 @@ const field=name=>form.elements.namedItem(name);
 let presets=[];
 function openEntry(trade=null) {
   editingId=trade?.id??null;form.reset();$('form-error').textContent='';$('entry-title').textContent=trade?'Edit completed trade':'Add completed trade';
-  if(trade){for(const key of ['symbol','direction','quantity','openedAt','entry','exit','multiplier','fees','setup','notes','risk'])field(key).value=trade[key]??'';field('closedAt').value=`${trade.date}T${trade.time}`;}
+  if(trade){for(const key of ['symbol','direction','quantity','openedAt','entry','exit','multiplier','fees','notes','risk'])field(key).value=trade[key]??'';field('closedAt').value=`${trade.date}T${trade.time}`;}
   const match=trade?presets.find(p=>p.assetType===trade.assetType&&p.pointValue===trade.multiplier&&(p.root==='EQUITY'||trade.symbol.replace(/^\//,'').startsWith(p.root))):null;
   $('instrument-preset').value=trade?(match?.root??'CUSTOM'):'EQUITY';field('multiplier').readOnly=$('instrument-preset').value==='EQUITY';
   const imported=trade?.source==='CSV';
@@ -105,7 +105,7 @@ function openEntry(trade=null) {
   for(const key of ['openedAt','closedAt'])field(key).step='1';
   field('direction').disabled=imported;$('instrument-preset').disabled=imported;
   $('entry-title').textContent=imported?'Edit imported trade journal':trade?'Edit completed trade':'Add completed trade';
-  $('entry-dialog').querySelector(':scope > p').textContent=imported?'Imported accounting is read-only. Edit setup, notes and initial planned risk here. All displayed times are Eastern.':'Manual entry supports one entry and exit in USD. All times are Eastern. Use execution CSV import for scaling and partial exits.';
+  $('entry-dialog').querySelector(':scope > p').textContent=imported?'Imported accounting is read-only. Edit notes and initial planned risk here. All displayed times are Eastern.':'Manual entry supports one entry and exit in USD. All times are Eastern. Use execution CSV import for scaling and partial exits.';
   $('entry-dialog').showModal();field('symbol').focus();
 }
 $('add-trade').addEventListener('click',()=>openEntry());
@@ -122,7 +122,7 @@ form.addEventListener('submit',async e=>{
     const response=await fetchApp(editingId?`/api/trades/${editingId}`:'/api/trades',{method:editingId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!response.ok){const problem=await response.json().catch(()=>null);throw new Error(problem?.errors?Object.values(problem.errors).flat().join(' '):'Could not save the trade.');}
     const saved=await response.json();savedTrades=savedTrades.filter(t=>t.id!==saved.id).concat(saved);trades=savedTrades;
-    $('entry-dialog').close();refreshOptions();$('period').value='all';$('start').value='';$('end').value='';for(const id of ['account','symbol','direction','setup'])$(id).value='';render();
+    $('entry-dialog').close();refreshOptions();$('period').value='all';$('start').value='';$('end').value='';for(const id of ['account','symbol','direction'])$(id).value='';render();
   }catch(error){$('form-error').textContent=error.message;}finally{$('save-trade').disabled=false;}
 });
 try { const response=await fetchApp('/api/status');if(!response.ok)throw new Error('Start the .NET host to use saved trades.');presets=(await response.json()).instruments;for(const preset of presets){if(![...$('instrument-preset').options].some(o=>o.value===preset.root))$('instrument-preset').add(new Option(`${preset.root} · $${preset.pointValue} / point`,preset.root));}await loadSaved(); }

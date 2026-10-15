@@ -16,9 +16,10 @@ public static class AnalysisChecks
         Check(DecisionRules.Apply(recommendation with{Decision=new("BUY","Bad stop",100,101,102)},DecisionSnapshot(),now).Decision!.Action=="WAIT"&&DecisionRules.Apply(recommendation with{Decision=new("BUY","Off tick",100.1m,99,102)},DecisionSnapshot(),now).Decision!.Action=="WAIT","invalid level direction and off-tick futures prices are rejected");
         var invalidPosition=false;try{DecisionRules.Position(new("LONG",0,100));}catch(FormatException){invalidPosition=true;}Check(invalidPosition&&DecisionRules.Position(new("FLAT",2,100)).Quantity is null,"manual position validation rejects invalid holdings and clears flat inventory");
         var directory=Path.Combine(Path.GetTempPath(),"analysis-check-"+Guid.NewGuid().ToString("N"));var store=new TradeStore(directory);
-        store.Save(new(){Id="fixture",Symbol="MES",Date="2026-10-06",Time="10:00",AccountingGrossPnl=100,Fees=5,Risk=50,Notes="Private note",Setup="Pullback"});
+        store.Save(new(){Id="fixture",Symbol="MES",Date="2026-10-06",Time="10:00",AccountingGrossPnl=100,Fees=5,Risk=50,Notes="Private note"});
         var service=new AnalysisService(store,new FixtureProvider(),Path.Combine(directory,"analysis"));
         var preview=service.Preview(new("journal",new(Symbol:"MES")));Check(!preview.Snapshot.GetRawText().Contains("Private note")&&preview.Snapshot.GetProperty("summary").GetProperty("net").GetDecimal()==95,"journal snapshot uses filtered accounting and excludes notes by default");
+        Check(!preview.Snapshot.GetRawText().Contains("setup",StringComparison.OrdinalIgnoreCase),"journal analysis contains no setup fields or setup breakdowns");
         Check(service.History().Length==0,"preview creates no analysis history or provider calls");
         var run=await service.Analyze(preview.Token,CancellationToken.None);Check(service.History().Single().Id==run.Id&&store.List().Single().NetPnl==95,"analysis history preserves input and result without changing trades");
         var rejected=false;try{await service.Analyze(preview.Token,CancellationToken.None);}catch(FormatException){rejected=true;}Check(rejected,"consumed analysis preview cannot be sent twice");
@@ -37,7 +38,7 @@ public static class AnalysisChecks
             {
                 var arguments=start.ArgumentList.ToArray();
                 Check(arguments.Contains(kind=="market"?"web_search=\"live\"":"web_search=\"disabled\"")&&arguments.Contains("features.shell_tool=false")&&arguments.Contains("--ignore-user-config")&&arguments.Contains("--ignore-rules"),kind+" analysis enables only its intended research access while preserving CLI isolation");
-                Check(input!.Contains(kind=="journal"?"Review only the selected closed trades":"Provide a fast day-trading analysis"),kind+" receives its own analysis prompt");
+                Check(input!.Contains(kind=="journal"?"Review only the selected closed trades":"Act as an aggressive, decisive intraday trade caller"),kind+" receives its own analysis prompt");
                 var path=arguments[Array.IndexOf(arguments,"--output-last-message")+1];
                 await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new AnalysisResult("Fixture","Review",["Data"],["Sample"],["Review"],"Scope"),CodexAnalysisProvider.Json),token);
                 return (0,"model: fixture");
@@ -50,7 +51,7 @@ public static class AnalysisChecks
         var brokenCodex=new CodexAnalysisProvider("fixture-codex",runProcess:(_,_,_)=>Task.FromResult((1,"401 unauthorized PRIVATE-TOKEN")),logger:failureLog);
         rejected=false;try{await brokenCodex.Analyze(JsonSerializer.SerializeToElement(new{kind="journal"}),directory,CancellationToken.None);}catch(FormatException){rejected=true;}
         Check(rejected&&failureLog.Messages.Any(line=>line.Contains("failureCategory=authentication"))&&failureLog.Messages.All(line=>!line.Contains("PRIVATE-TOKEN")),"Codex failures log a safe category without raw subprocess output");
-        Check(run.PromptVersion=="journal-review-v1"&&AnalysisPrompts.For(DecisionSnapshot()).TimeLimit==TimeSpan.FromSeconds(90),"saved results identify their separate prompt version and market runs have a 90-second execution limit");
+        Check(run.PromptVersion=="journal-review-v2"&&AnalysisPrompts.For(DecisionSnapshot()).Version=="market-signal-v6"&&AnalysisPrompts.For(DecisionSnapshot()).TimeLimit==TimeSpan.FromSeconds(90),"saved results identify their separate prompt version and market runs have a 90-second execution limit");
         if(live){var provider=new CodexAnalysisProvider();Console.WriteLine(JsonSerializer.Serialize(await provider.Status()));var liveService=new AnalysisService(store,provider,Path.Combine(directory,"live"));var sample=liveService.Preview(new("sample-market"));var response=await liveService.Analyze(sample.Token,CancellationToken.None);Check(response.Result.Limitations.Length>0,"actual Codex ChatGPT analysis returns validated structured output");Console.WriteLine("Synthetic live test saved in "+directory);}
     }
     private sealed class FixtureProvider:IAnalysisProvider

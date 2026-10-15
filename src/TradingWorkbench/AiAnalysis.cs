@@ -104,7 +104,7 @@ public sealed class AnalysisService
         object snapshot;
         if(request.Kind=="journal"){
             var selected=(request.Filters??new()).Apply(trades.List());if(selected.Length==0)throw new FormatException("No saved trades match this range.");if(selected.Length>250)throw new FormatException("Narrow the range to at most 250 trades for this first version.");
-            snapshot=new{kind="journal",provenance="Saved closed trades; timestamps Eastern; USD; no intratrade market path",createdAt=DateTimeOffset.UtcNow,summary=Analytics.Calculate(selected),notesIncluded=request.IncludeNotes,trades=selected.Select((t,i)=>new{label=$"Trade {i+1}",t.Symbol,t.Date,t.Time,t.Direction,t.Quantity,t.NetPnl,t.Fees,t.Risk,t.Setup,notes=request.IncludeNotes?t.Notes[..Math.Min(t.Notes.Length,500)]:null})};
+            snapshot=new{kind="journal",provenance="Saved closed trades; timestamps Eastern; USD; no intratrade market path",createdAt=DateTimeOffset.UtcNow,summary=Analytics.Calculate(selected),notesIncluded=request.IncludeNotes,trades=selected.Select((t,i)=>new{label=$"Trade {i+1}",t.Symbol,t.Date,t.Time,t.Direction,t.Quantity,t.NetPnl,t.Fees,t.Risk,notes=request.IncludeNotes?t.Notes[..Math.Min(t.Notes.Length,500)]:null})};
         }else if(request.Kind=="sample-market")snapshot=SampleMarket();else if(request.Kind=="saved-market"){
             var data=JsonSerializer.SerializeToNode((market??throw new FormatException("Market storage is unavailable.")).Snapshot(request.Symbol??"",request.Source,request.Days),CodexAnalysisProvider.Json)!.AsObject();
             var position=DecisionRules.Position(request.Position);

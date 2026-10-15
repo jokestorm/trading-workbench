@@ -18,7 +18,7 @@ This plan proposes implementation; it does not authorize placing orders or enabl
 - Local storage, one backend process, and no cloud deployment required.
 - Initial instruments: equities and dated futures contracts. Options, multi-leg positions, foreign-currency accounting, and corporate-action processing are deferred until needed.
 - Start with CSV imports and manual entry. Add broker synchronization when actual account data has been validated.
-- Capture setup, notes, and optional planned risk early; do not require them to calculate P/L.
+- Capture notes, and optional planned risk early; do not require them to calculate P/L.
 - Start market monitoring with a small user-selected watchlist.
 - Collect market data while the application is running. Continuous collection while the PC sleeps or is off would require a later hosting decision.
 - AI provider and model remain configurable decisions. The initial integration accepts structured snapshots and returns validated structured analysis.
@@ -77,9 +77,9 @@ These boundaries allow chart/layout changes without rewriting accounting, import
 
 - Summary: realized net P/L, trade count, win rate, average winner/loser, and expectancy.
 - Trade list: instrument, direction, dates, quantity, entry/exit, fees, and P/L.
-- Trade detail: fills, notes, setup, optional planned risk, and plan compliance.
-- Charts: cumulative realized P/L and P/L by day; add P/L distribution and instrument/setup breakdowns next.
-- Filters: date range, account, instrument, direction, and setup. Offer common presets and a custom range.
+- Trade detail: fills, notes, optional planned risk, and plan compliance.
+- Charts: cumulative realized P/L and P/L by day; add P/L distribution and instrument breakdowns next.
+- Filters: date range, account, instrument, and direction. Offer common presets and a custom range.
 - CSV export of the filtered trades.
 
 ### Accounting rules to settle before implementation
@@ -102,7 +102,7 @@ These boundaries allow chart/layout changes without rewriting accounting, import
 - `ImportBatch` and source records: provenance, validation status, deduplication keys.
 - `Fill`: account, instrument, side, quantity, price, execution timestamp, fees, source identity.
 - `Trade` and `TradeFillAllocation`: reconstruction plus quantity and fee allocation.
-- `TradeJournal`: stable notes, setup, initial risk, compliance, and overrides, preserved during reconstruction.
+- `TradeJournal`: stable notes, initial risk, compliance, and overrides, preserved during reconstruction.
 
 ## 5. Tool B — Market Monitor and AI Hook
 
@@ -178,7 +178,7 @@ Inspect a representative export and implement only that format. Add preview, val
 
 ### Stage 3 — Graphing and ranged analysis
 
-Start with cumulative net P/L and daily P/L. Then add instrument/setup breakdowns, expectancy, distribution, dollar drawdown, optional R, and export according to usefulness.
+Start with cumulative net P/L and daily P/L. Then add instrument breakdowns, expectancy, distribution, dollar drawdown, optional R, and export according to usefulness.
 
 **Checkpoint:** change the date range and filters; verify that table and chart totals agree. Review chart usefulness before adding more metrics.
 
@@ -223,7 +223,7 @@ Keep verification proportional to this personal tool: a small accounting fixture
 
 ## 8. Immediate next implementation task
 
-Stage 0 app shell is implemented: Journal and Market tabs, synthetic trades/prices, date/instrument/direction/setup filters, P/L summaries, equity curve, setup breakdown, and trade details. Accounting/filter fixtures pass and HTTP assets have been checked. Automated visual review was blocked by the in-app browser URL policy; hands-on layout review remains the checkpoint.
+Stage 0 app shell is implemented: Journal and Market tabs, synthetic trades/prices, date/instrument/direction filters, P/L summaries, equity curve, instrument breakdown, and trade details. Accounting/filter fixtures pass and HTTP assets have been checked. Automated visual review was blocked by the in-app browser URL policy; hands-on layout review remains the checkpoint.
 
 Stage 1 is implemented: saved manual single-entry/single-exit trades, editing, notes, optional risk, instrument presets with editable futures point value, decimal server P/L, separate sample mode, and SQLite backup. Entry/exit fills are persisted transactionally. Accounting, validation, database reopening, backup restore, and HTTP create/edit/list checks pass. The journal currently assumes USD, one account, and user-entered Eastern local timestamps; partial exits and import timestamp normalization are deferred to Stage 2. Automated visual review remains blocked by the browser URL policy.
 
@@ -231,7 +231,7 @@ Stage 2 import foundation is implemented: execution CSV mapping/preview, flat-to
 
 The thinkorswim statement adapter reconciles executions, closed trades, fees, holdings, and the settlement ledger. It preserves split fills and stores open inventory separately.
 
-Stage 3 is implemented: server-calculated filtered summaries, daily net P/L, instrument/setup breakdowns, fixed-dollar trade distribution, profit factor, average winner/loser, current and maximum dollar drawdown, mean/median R and recorded-risk coverage. Reusable date presets use Eastern calendar dates, with sample dates anchored to the latest synthetic trade. Filtered CSV export shares the same server filter and decimal calculations. Date boundaries, missing risk, empty populations, distribution boundaries, export totals, and statement report totals pass isolated checks. Automated visual review remains blocked by the browser URL policy; hands-on report layout review is the checkpoint.
+Stage 3 is implemented: server-calculated filtered summaries, daily net P/L, instrument breakdowns, fixed-dollar trade distribution, profit factor, average winner/loser, current and maximum dollar drawdown, mean/median R and recorded-risk coverage. Reusable date presets use Eastern calendar dates, with sample dates anchored to the latest synthetic trade. Filtered CSV export shares the same server filter and decimal calculations. Date boundaries, missing risk, empty populations, distribution boundaries, export totals, and statement report totals pass isolated checks. Automated visual review remains blocked by the browser URL policy; hands-on report layout review is the checkpoint.
 
 The user reviewed Stage 3 and accepted its layout. Stage 4 connection foundation is implemented: protected local app settings, state-checked OAuth with a manual HTTPS loopback callback handoff, automatic access-token refresh on quote requests, local disconnect, and one on-demand quote with timestamps and realtime/delayed status. Credentials use Windows DPAPI-backed Data Protection separately from journal data and backups. Simulated OAuth/refresh/quote tests and isolated HTTP settings/state/origin checks pass without Schwab network calls. No order endpoints are implemented.
 

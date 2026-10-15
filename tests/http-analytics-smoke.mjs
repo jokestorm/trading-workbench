@@ -8,7 +8,7 @@ const post=async(path,body)=>{const response=await fetch(base+path,{method:'POST
 const preview=await post('/api/imports/preview',request);assert.deepEqual(preview.errors,[]);await post('/api/imports/commit',{token:preview.token});
 const query=new URLSearchParams({account});
 const summary=await (await fetch(base+'/api/analytics?'+query)).json();assert.equal(summary.count,2);assert.equal(summary.net,77);assert.equal(summary.fees,8);assert.equal(summary.riskCount,0);assert.equal(summary.averageR,null);assert.equal(summary.profitFactorIsInfinite,true);
-for(const groups of [summary.daily,summary.instruments,summary.setups])assert.equal(groups.reduce((n,g)=>n+g.net,0),summary.net);
+for(const groups of [summary.daily,summary.instruments])assert.equal(groups.reduce((n,g)=>n+g.net,0),summary.net);
 assert.equal(summary.distribution.reduce((n,g)=>n+g.count,0),summary.count);
 const exported=await fetch(base+'/api/trades/export?'+query);assert.match(exported.headers.get('content-disposition'),/trades-filtered.csv/);const rows=parseCsv(await exported.text());assert.equal(rows.length,3);assert.equal(rows.slice(1).reduce((n,r)=>n+Number(r[11]),0),summary.net);
 const t=preview.trades[0].trade;query.set('start',t.date);query.set('end',t.date);query.set('direction',t.direction);query.set('symbol',t.symbol);

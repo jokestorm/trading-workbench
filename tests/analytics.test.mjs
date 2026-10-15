@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { netPnl,filterTrades,summarize,dateRange,easternToday } from '../web/analytics.js';
-const long={id:'a',date:'2026-10-01',time:'10:00',symbol:'MES',direction:'LONG',quantity:2,entry:100,exit:104,multiplier:5,fees:3,setup:'Pullback'};
+const long={id:'a',date:'2026-10-01',time:'10:00',symbol:'MES',direction:'LONG',quantity:2,entry:100,exit:104,multiplier:5,fees:3};
 const short={...long,id:'b',date:'2026-10-02',direction:'SHORT',exit:103};
 test('long and short net P/L account for direction, multiplier, quantity and fees',()=>{assert.equal(netPnl(long),37);assert.equal(netPnl(short),-33);});
-test('combined filters are inclusive and applied to the same population',()=>{assert.deepEqual(filterTrades([short,long],{start:'2026-10-01',end:'2026-10-01',symbol:'MES',direction:'LONG',setup:'Pullback'}),[long]);assert.equal(filterTrades([long],{symbol:'AAPL'}).length,0);});
+test('combined filters are inclusive and applied to the same population',()=>{assert.deepEqual(filterTrades([short,long],{start:'2026-10-01',end:'2026-10-01',symbol:'MES',direction:'LONG'}),[long]);assert.equal(filterTrades([long],{symbol:'AAPL'}).length,0);});
 test('equity curve and drawdown reconcile to the selected closed trades',()=>{const s=summarize(filterTrades([short,long],{}));assert.equal(s.net,4);assert.equal(s.expectancy,2);assert.equal(s.winRate,.5);assert.equal(s.drawdown,33);assert.equal(s.curve.at(-1).value,s.net);});
 test('empty population has no misleading win rate or expectancy',()=>{const s=summarize([]);assert.equal(s.net,0);assert.equal(s.winRate,null);assert.equal(s.expectancy,null);assert.deepEqual(s.curve,[]);});
 test('reports conserve P/L and counts with explicit risk coverage',()=>{const s=summarize([{...long,risk:37},short,{...long,id:'c',netPnl:0}]);assert.equal(s.daily.reduce((n,g)=>n+g.net,0),s.net);assert.equal(s.instruments.reduce((n,g)=>n+g.net,0),s.net);assert.equal(s.distribution.reduce((n,g)=>n+g.count,0),3);assert.equal(s.riskCount,1);assert.equal(s.averageR,1);assert.equal(s.riskCoverage,1/3);assert.equal(s.breakEven,1);});
