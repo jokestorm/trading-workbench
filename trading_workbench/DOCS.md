@@ -105,6 +105,20 @@ GitHub checks the bundled ARM64 CLI and local auth protocol without a real login
 or model call. First actual ChatGPT sign-in and inference on the Pi remain
 post-install checks; this is a personal app with manual analysis.
 
+## Diagnosing analysis delays
+
+Open **Settings → Apps → Trading Workbench → Log**, then press Analyze.
+Lines beginning with `Analysis` share a run ID. Follow `preparing`, `refreshing`,
+`analyzing`, `saving`, and `completed`, or a terminal failure/cancellation state.
+Active runs report their stage and total elapsed seconds every 15 seconds.
+`Codex starting` and `Codex exited` distinguish model time from price refresh
+and saving. A failed Codex process reports its exit code and a safe category
+when recognized; raw output and private inputs are withheld.
+
+Price refresh has a 60-second limit. Codex execution is limited to 90 seconds
+for market analysis and 240 seconds for journal review, separately from refresh.
+If a run fails, share the `Analysis` lines for its run ID to locate the delay.
+
 ## Updating
 
 Increment `version` in `config.yaml`, update CHANGELOG.md, and publish a matching

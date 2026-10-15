@@ -19,9 +19,11 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
     private CancellationTokenSource? cancellation;
     private Task? running;
     private bool stopping;
+    private readonly ILogger<AnalysisWorkflow> logger;
 
-    public AnalysisWorkflow(AnalysisService analysis,string directory,Func<AnalysisRequest,CancellationToken,Task<MarketQuote>> refresh)
+    public AnalysisWorkflow(AnalysisService analysis,string directory,Func<AnalysisRequest,CancellationToken,Task<MarketQuote>> refresh,ILogger<AnalysisWorkflow>? logger=null)
     {
+        this.logger=logger??Microsoft.Extensions.Logging.Abstractions.NullLogger<AnalysisWorkflow>.Instance;
         this.analysis=analysis;this.directory=directory;this.refresh=refresh;Directory.CreateDirectory(directory);
         var jobs=Directory.GetFiles(directory,"*.json").Select(path=>JsonSerializer.Deserialize<AnalysisJob>(File.ReadAllText(path),CodexAnalysisProvider.Json)!).ToArray();
         foreach(var job in jobs.Where(j=>j.Active))
@@ -30,6 +32,7 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
             // disguise a completed run or cause another subscription call.
             AnalysisRun? saved=null;try{saved=analysis.Find(job.Id);}catch(FormatException){}
             Write(job with{State=saved is null?"interrupted":"completed",Message=saved is null?"App restarted during analysis. Start a new analysis when ready.":"Analysis saved.",UpdatedAt=DateTimeOffset.UtcNow,ResultId=saved?.Id});
+            this.logger.LogInformation("Analysis {RunId} recovered after restart stage={Stage}",job.Id,saved is null?"interrupted":"completed");
         }
         current=Directory.GetFiles(directory,"*.json").Select(path=>JsonSerializer.Deserialize<AnalysisJob>(File.ReadAllText(path),CodexAnalysisProvider.Json)!).OrderByDescending(j=>j.StartedAt).FirstOrDefault();
     }
@@ -37,14 +40,18 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
     {
         var path=Path.Combine(directory,job.Id+".json");File.WriteAllText(path+".tmp",JsonSerializer.Serialize(job,CodexAnalysisProvider.Json));File.Move(path+".tmp",path,true);
     }
-    private void Set(AnalysisJob job){Write(job);current=job;}
+    private void Set(AnalysisJob job)
+    {
+        Write(job);current=job;
+        logger.LogInformation("Analysis {RunId} kind={Kind} stage={Stage} elapsedSeconds={Elapsed:F1}",job.Id,job.Kind,job.State,(DateTimeOffset.UtcNow-job.StartedAt).TotalSeconds);
+    }
     public AnalysisJob? Current(){lock(sync)return current;}
     public AnalysisJob Start(AnalysisRequest request)
     {
         lock(sync)
         {
             if(stopping)throw new FormatException("The app is stopping. Try again after it restarts.");
-            if(current is {Active:true})return current;
+            if(current is {Active:true}){logger.LogInformation("Analysis {RunId} already active stage={Stage}",current.Id,current.State);return current;}
             if(request.Kind is not ("journal" or "saved-market"))throw new FormatException("Choose market or journal analysis.");
             if(request.Kind=="saved-market")
             {
@@ -66,12 +73,19 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
     }
     private async Task Run(AnalysisJob job,AnalysisRequest request,AnalysisPreview? preview,CancellationToken token)
     {
+        using var heartbeatStop=new CancellationTokenSource();
+        var heartbeat=Heartbeat(heartbeatStop.Token);
         try
         {
             if(request.Kind=="saved-market")
             {
                 Progress("refreshing","Updating prices…");
-                var quote=await refresh(request,token);token.ThrowIfCancellationRequested();
+                using var refreshTimeout=CancellationTokenSource.CreateLinkedTokenSource(token);
+                refreshTimeout.CancelAfter(TimeSpan.FromSeconds(60));
+                MarketQuote quote;
+                try{quote=await refresh(request,refreshTimeout.Token).WaitAsync(refreshTimeout.Token);}
+                catch(OperationCanceledException) when(refreshTimeout.IsCancellationRequested&&!token.IsCancellationRequested){throw new TimeoutException("Price refresh exceeded 60 seconds.");}
+                token.ThrowIfCancellationRequested();
                 if(quote.Symbol!=request.Symbol)throw new FormatException("Refreshed quote does not match the requested contract.");
                 preview=analysis.Preview(request,quote);
             }
@@ -81,7 +95,9 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
             {
                 // Cancellation and committing the result have one ordering:
                 // canceled work cannot later appear as a successful analysis.
-                token.ThrowIfCancellationRequested();analysis.Save(result);
+                token.ThrowIfCancellationRequested();
+                logger.LogInformation("Analysis {RunId} stage=saving elapsedSeconds={Elapsed:F1}",job.Id,(DateTimeOffset.UtcNow-job.StartedAt).TotalSeconds);
+                analysis.Save(result);
                 Set(current! with{State="completed",Message="Analysis saved.",UpdatedAt=DateTimeOffset.UtcNow,ResultId=result.Id});
             }
         }
@@ -89,13 +105,28 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
         {
             lock(sync)
             {
+                // Exception messages and subprocess output may contain private inputs.
+                logger.LogWarning("Analysis {RunId} stopped stage={Stage} errorType={ErrorType} elapsedSeconds={Elapsed:F1}",job.Id,current?.State,error.GetType().Name,(DateTimeOffset.UtcNow-job.StartedAt).TotalSeconds);
                 var state=stopping?"interrupted":token.IsCancellationRequested?"canceled":"failed";
-                var message=state=="interrupted"?"App stopped during analysis. Start a new analysis when ready.":state=="canceled"?"Analysis canceled.":error is FormatException?error.Message:"Analysis failed. Check the connection and try again.";
+                var message=state=="interrupted"?"App stopped during analysis. Start a new analysis when ready.":state=="canceled"?"Analysis canceled.":error is TimeoutException?"Updating prices exceeded 60 seconds. Check Schwab and retry.":error is FormatException?error.Message:"Analysis failed. Check the connection and try again.";
                 // Keep status reads truthful even if the disk itself fails.
                 current=current! with{State=state,Message=message,UpdatedAt=DateTimeOffset.UtcNow};
                 try{Write(current);}catch(IOException){}catch(UnauthorizedAccessException){}
+                logger.LogInformation("Analysis {RunId} stage={Stage}",job.Id,state);
             }
         }
+        finally{heartbeatStop.Cancel();await heartbeat;}
+    }
+    private async Task Heartbeat(CancellationToken token)
+    {
+        try
+        {
+            using var timer=new PeriodicTimer(TimeSpan.FromSeconds(15));
+            while(await timer.WaitForNextTickAsync(token))
+                lock(sync)if(current is {Active:true} job)
+                    logger.LogInformation("Analysis {RunId} still running stage={Stage} elapsedSeconds={Elapsed:F1}",job.Id,job.State,(DateTimeOffset.UtcNow-job.StartedAt).TotalSeconds);
+        }
+        catch(OperationCanceledException) when(token.IsCancellationRequested){}
     }
     public AnalysisJob Cancel(string id)
     {
@@ -115,7 +146,7 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
     public static void Map(WebApplication app,AnalysisWorkflow workflow)
     {
         app.MapGet("/api/ai/runs/current",()=>new{run=workflow.Current()});
-        app.MapPost("/api/ai/runs",(AnalysisRequest request)=>{try{return Results.Json(workflow.Start(request),statusCode:202);}catch(FormatException e){return Results.BadRequest(new{message=e.Message});}});
+        app.MapPost("/api/ai/runs",(AnalysisRequest request)=>{try{return Results.Json(workflow.Start(request),statusCode:202);}catch(FormatException e){workflow.logger.LogWarning("Analysis request rejected stage=admission errorType=FormatException");return Results.BadRequest(new{message=e.Message});}});
         app.MapPost("/api/ai/runs/{id}/cancel",(string id)=>{try{return Results.Ok(workflow.Cancel(id));}catch(FormatException e){return Results.BadRequest(new{message=e.Message});}});
     }
 }

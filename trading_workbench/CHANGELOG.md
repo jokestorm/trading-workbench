@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.5
+
+- Show the latest observed quote as a separate gold marker on the minute chart,
+  updating with each quote refresh. Keep historical bars unchanged, preserve
+  zoom, autoscale visible prices, and label delayed, stale, or unverified quotes.
+- Automatically refresh the viewed contract's quote every second. Pause when
+  the market page is hidden, cancel obsolete requests on selection changes, and
+  fetch closed minute bars once per minute. Remove the polling checkbox.
+- Default each market contract's manual position selector to Flat.
+- Add analysis stage, elapsed-time, 15-second heartbeat, and Codex process logs
+  to Home Assistant app logs without prompts, positions, credentials, or raw
+  subprocess output. Report safe failure categories and restart recovery.
+- Limit analysis price refreshes to 60 seconds, with a visible timeout message.
+
 ## 0.1.4
 
 - Report unitemized daily opening-cash changes separately from sweeps, fees, and

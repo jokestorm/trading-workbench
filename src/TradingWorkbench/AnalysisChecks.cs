@@ -31,6 +31,7 @@ public static class AnalysisChecks
         Check(JsonSerializer.Serialize(AnalysisService.SampleMarket()).Contains("SYNTHETIC"),"sample market provenance is explicit");
         foreach(var kind in new[]{"journal","market","synthetic"})
         {
+            var logs=new AnalysisWorkflowChecks.CapturedLog<CodexAnalysisProvider>();
             var snapshot=kind=="market"?DecisionSnapshot():JsonSerializer.SerializeToElement(new{kind});
             var invocation=new CodexAnalysisProvider("fixture-codex",runProcess:async(start,input,token)=>
             {
@@ -40,10 +41,15 @@ public static class AnalysisChecks
                 var path=arguments[Array.IndexOf(arguments,"--output-last-message")+1];
                 await File.WriteAllTextAsync(path,JsonSerializer.Serialize(new AnalysisResult("Fixture","Review",["Data"],["Sample"],["Review"],"Scope"),CodexAnalysisProvider.Json),token);
                 return (0,"model: fixture");
-            });
+            },logger:logs);
             var runDirectory=Path.Combine(directory,"prompt-"+kind);Directory.CreateDirectory(runDirectory);
             await invocation.Analyze(snapshot,runDirectory,CancellationToken.None);
+            Check(logs.Messages.Any(line=>line.Contains("Codex starting"))&&logs.Messages.Any(line=>line.Contains("exitCode=0")&&line.Contains("resultPresent=True"))&&logs.Messages.All(line=>!line.Contains("SNAPSHOT:")&&!line.Contains("Fixture review")),kind+" Codex diagnostics report process timing and exit without input or result contents");
         }
+        var failureLog=new AnalysisWorkflowChecks.CapturedLog<CodexAnalysisProvider>();
+        var brokenCodex=new CodexAnalysisProvider("fixture-codex",runProcess:(_,_,_)=>Task.FromResult((1,"401 unauthorized PRIVATE-TOKEN")),logger:failureLog);
+        rejected=false;try{await brokenCodex.Analyze(JsonSerializer.SerializeToElement(new{kind="journal"}),directory,CancellationToken.None);}catch(FormatException){rejected=true;}
+        Check(rejected&&failureLog.Messages.Any(line=>line.Contains("failureCategory=authentication"))&&failureLog.Messages.All(line=>!line.Contains("PRIVATE-TOKEN")),"Codex failures log a safe category without raw subprocess output");
         Check(run.PromptVersion=="journal-review-v1"&&AnalysisPrompts.For(DecisionSnapshot()).TimeLimit==TimeSpan.FromSeconds(90),"saved results identify their separate prompt version and market runs have a 90-second execution limit");
         if(live){var provider=new CodexAnalysisProvider();Console.WriteLine(JsonSerializer.Serialize(await provider.Status()));var liveService=new AnalysisService(store,provider,Path.Combine(directory,"live"));var sample=liveService.Preview(new("sample-market"));var response=await liveService.Analyze(sample.Token,CancellationToken.None);Check(response.Result.Limitations.Length>0,"actual Codex ChatGPT analysis returns validated structured output");Console.WriteLine("Synthetic live test saved in "+directory);}
     }

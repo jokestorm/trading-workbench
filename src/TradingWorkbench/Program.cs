@@ -39,11 +39,11 @@ var app = builder.Build();
 var store = new TradeStore(app.Configuration["DataDirectory"] ?? Path.Combine(root, "data"));
 var imports = new ImportService(store);
 var schwab=new SchwabConnection(secretsDirectory,app.Services.GetRequiredService<IDataProtectionProvider>(),new HttpClient{Timeout=TimeSpan.FromSeconds(20)});
-var aiProvider=new CodexAnalysisProvider(builder.Configuration["CodexExecutable"],builder.Configuration["CodexHome"]);
+var aiProvider=new CodexAnalysisProvider(builder.Configuration["CodexExecutable"],builder.Configuration["CodexHome"],logger:app.Services.GetRequiredService<ILogger<CodexAnalysisProvider>>());
 await using var codexLogin=new CodexLoginService(()=>new CodexLoginSession(aiProvider),aiProvider.Status,aiProvider.Logout,aiProvider.EnterOperation);
 var market=new MarketStore(app.Configuration["DataDirectory"]??Path.Combine(root,"data"));
 var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market);
-await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis","jobs"),(request,token)=>MarketRoutes.RefreshForAnalysis(market,schwab,request,token));
+await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis","jobs"),(request,token)=>MarketRoutes.RefreshForAnalysis(market,schwab,request,token),app.Services.GetRequiredService<ILogger<AnalysisWorkflow>>());
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
 app.Use(async (context, next) =>
 {

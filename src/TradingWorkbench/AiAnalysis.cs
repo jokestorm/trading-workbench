@@ -12,8 +12,9 @@ public record AnalysisRun(string Id,string Kind,DateTimeOffset CreatedAt,string 
 public interface IAnalysisProvider { Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token); }
 public record CodexStatus(bool Installed,bool SubscriptionLogin,string Message);
 
-public sealed class CodexAnalysisProvider(string? executable=null,string? home=null,Func<ProcessStartInfo,string?,CancellationToken,Task<(int Exit,string Output)>>? runProcess=null):IAnalysisProvider
+public sealed class CodexAnalysisProvider(string? executable=null,string? home=null,Func<ProcessStartInfo,string?,CancellationToken,Task<(int Exit,string Output)>>? runProcess=null,ILogger<CodexAnalysisProvider>? logger=null):IAnalysisProvider
 {
+    private readonly ILogger<CodexAnalysisProvider> log=logger??Microsoft.Extensions.Logging.Abstractions.NullLogger<CodexAnalysisProvider>.Instance;
     private readonly SemaphoreSlim operation=new(1,1);
     public IDisposable EnterOperation()
     {
@@ -65,7 +66,20 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
         schema["properties"]=properties;schema["required"]=new JsonArray(properties.Select(p=>(JsonNode?)JsonValue.Create(p.Key)).ToArray());
         await File.WriteAllTextAsync(schemaPath,schema.ToJsonString(),token);
         var start=Start("exec","--ignore-user-config","--ignore-rules","--ephemeral","--skip-git-repo-check","--sandbox","read-only","--color","never","-c","forced_login_method=\"chatgpt\"","-c","model_provider=\"openai\"","-c",policy.AllowResearch?"web_search=\"live\"":"web_search=\"disabled\"","-c","features.shell_tool=false","-c","features.remote_plugin=false","--output-schema",schemaPath,"--output-last-message",resultPath,"-");start.WorkingDirectory=directory;
-        var response=await (runProcess??RunProcess)(start,policy.Text,token);
+        var runId=Path.GetFileName(directory);var elapsed=Stopwatch.StartNew();
+        log.LogInformation("Analysis {RunId} Codex starting research={Research} limitSeconds={Limit}",runId,policy.AllowResearch,policy.TimeLimit.TotalSeconds);
+        (int Exit,string Output) response;
+        try{response=await (runProcess??RunProcess)(start,policy.Text,token);}
+        catch(Exception error)
+        {
+            log.LogWarning("Analysis {RunId} Codex stopped errorType={ErrorType} elapsedSeconds={Elapsed:F1}",runId,error.GetType().Name,elapsed.Elapsed.TotalSeconds);throw;
+        }
+        log.LogInformation("Analysis {RunId} Codex exited exitCode={ExitCode} resultPresent={ResultPresent} elapsedSeconds={Elapsed:F1}",runId,response.Exit,File.Exists(resultPath),elapsed.Elapsed.TotalSeconds);
+        if(response.Exit!=0)
+        {
+            var failure=response.Output.Contains("429",StringComparison.OrdinalIgnoreCase)||response.Output.Contains("usage limit",StringComparison.OrdinalIgnoreCase)?"rate-or-usage-limit":response.Output.Contains("401",StringComparison.OrdinalIgnoreCase)||response.Output.Contains("unauthorized",StringComparison.OrdinalIgnoreCase)?"authentication":response.Output.Contains("reconnect",StringComparison.OrdinalIgnoreCase)||response.Output.Contains("connection",StringComparison.OrdinalIgnoreCase)?"connection":"unclassified";
+            log.LogWarning("Analysis {RunId} Codex failureCategory={FailureCategory}; raw output withheld",runId,failure);
+        }
         var model=System.Text.RegularExpressions.Regex.Match(response.Output,@"(?m)^model:\s*([^\r\n]+)");Model=model.Success?model.Groups[1].Value.Trim():"CLI default (not reported)";
         if(response.Exit!=0||!File.Exists(resultPath))throw new FormatException("Codex analysis did not complete. Check ChatGPT login and subscription limits, then try again.");
         try {return Validate(await File.ReadAllTextAsync(resultPath,token));}catch(JsonException){throw new FormatException("Codex returned invalid structured output. No analysis was saved.");}

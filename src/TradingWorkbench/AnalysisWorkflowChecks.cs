@@ -5,6 +5,13 @@ namespace TradingWorkbench;
 
 public static class AnalysisWorkflowChecks
 {
+    internal sealed class CapturedLog<T>:ILogger<T>
+    {
+        public List<string> Messages {get;}=[];
+        public IDisposable? BeginScope<TState>(TState state) where TState:notnull=>null;
+        public bool IsEnabled(LogLevel level)=>true;
+        public void Log<TState>(LogLevel level,EventId id,TState state,Exception? error,Func<TState,Exception?,string> formatter){lock(Messages)Messages.Add(formatter(state,error));}
+    }
     private static void Check(bool value,string message){if(!value)throw new Exception(message);Console.WriteLine("PASS "+message);}
     private sealed class ControlledProvider:IAnalysisProvider
     {
@@ -28,13 +35,15 @@ public static class AnalysisWorkflowChecks
         var store=new TradeStore(directory);
         store.Save(new(){Id="fixture",Symbol="MES",Date="2026-10-06",Time="10:00",AccountingGrossPnl=100,Fees=5});
         var provider=new ControlledProvider();var analysis=new AnalysisService(store,provider,Path.Combine(directory,"analysis"));
-        await using var workflow=new AnalysisWorkflow(analysis,Path.Combine(directory,"jobs"),(_,_)=>throw new Exception("Journal must not refresh market data"));
+        var logs=new CapturedLog<AnalysisWorkflow>();
+        await using var workflow=new AnalysisWorkflow(analysis,Path.Combine(directory,"jobs"),(_,_)=>throw new Exception("Journal must not refresh market data"),logs);
         var job=workflow.Start(new("journal"));
         var snapshot=await provider.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Check(workflow.Start(new("journal")).Id==job.Id,"repeated Analyze clicks show the same active run");
         store.Save(new(){Id="later",Symbol="MES",Date="2026-10-06",Time="11:00",AccountingGrossPnl=200});
         provider.Result.SetResult(Answer);
         var finished=await Finished(workflow);
+        Check(new[]{"preparing","analyzing","completed"}.All(stage=>logs.Messages.Any(line=>line.Contains(job.Id)&&line.Contains("stage="+stage))),"analysis logs correlate admission, provider stage and saved completion by run ID");
         Check(finished.State=="completed"&&analysis.Find(job.Id).Snapshot.GetProperty("summary").GetProperty("net").GetDecimal()==95,"background journal run saves its original frozen selection without a waiting browser");
         Check(snapshot.GetProperty("trades").GetArrayLength()==1,"journal preparation freezes selected trades at start");
         await using var reopened=new AnalysisWorkflow(analysis,Path.Combine(directory,"jobs"),(_,_)=>throw new Exception());
@@ -66,9 +75,11 @@ public static class AnalysisWorkflowChecks
         var staleJob=stale.Start(new("saved-market",Symbol:"/MESZ26",Position:new("FLAT")));
         Check((await Finished(stale)).State=="completed"&&marketAnalysis.Find(staleJob.Id).Result.Decision?.Action=="WAIT","workflow applies freshness guards before saving a market recommendation");
 
-        await using var failing=new AnalysisWorkflow(marketAnalysis,Path.Combine(directory,"failed-jobs"),(_,_)=>throw new FormatException("Fixture refresh failure"));
+        var failedLogs=new CapturedLog<AnalysisWorkflow>();
+        await using var failing=new AnalysisWorkflow(marketAnalysis,Path.Combine(directory,"failed-jobs"),(_,_)=>throw new FormatException("Fixture refresh failure PRIVATE-DATA"),failedLogs);
         failing.Start(new("saved-market",Symbol:"/MESZ26"));
         Check((await Finished(failing)).State=="failed"&&marketAnalysis.History().Length==2,"failed refresh does not analyze cached observations or save a result");
+        Check(failedLogs.Messages.Any(line=>line.Contains("stage=refreshing")&&line.Contains("errorType=FormatException"))&&failedLogs.Messages.All(line=>!line.Contains("PRIVATE-DATA")),"analysis failure logs identify the failing stage without exception messages or private data");
 
         var canceledProvider=new ControlledProvider();var canceledAnalysis=new AnalysisService(store,canceledProvider,Path.Combine(directory,"canceled-analysis"));
         await using var canceled=new AnalysisWorkflow(canceledAnalysis,Path.Combine(directory,"canceled-jobs"),(_,_)=>throw new Exception());
