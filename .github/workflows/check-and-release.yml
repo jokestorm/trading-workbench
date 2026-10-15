@@ -21,6 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci --ignore-scripts
       - run: dotnet build src/TradingWorkbench -c Release
       - run: dotnet src/TradingWorkbench/bin/Release/net10.0/TradingWorkbench.dll --self-test
       - run: node --test tests/*.test.mjs

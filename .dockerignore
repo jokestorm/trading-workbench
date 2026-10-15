@@ -2,6 +2,7 @@
 **/obj
 .git
 .codex
+.codex-remote-attachments
 .agents
 data
 artifacts

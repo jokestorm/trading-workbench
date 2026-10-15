@@ -130,6 +130,7 @@ depends on the database schema.
 ## Local checks
 
 ```powershell
+npm ci --ignore-scripts
 node --test tests/*.test.mjs
 dotnet build src/TradingWorkbench -o data/repo-check
 dotnet data/repo-check/TradingWorkbench.dll --self-test

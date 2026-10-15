@@ -1,6 +1,6 @@
 import {createViewedRefresh} from './viewed-refresh.js';
 import { fetchApp } from './http.js';
-import {timeBounds, clampWindow, zoomWindow, pointsInWindow, bindChartNavigation} from './chart-viewport.js?v=ha-0.1.5';
+import {timeBounds, clampWindow, zoomWindow, pointsInWindow, bindChartNavigation} from './chart-viewport.js?v=ha-0.1.6';
 const $=id=>document.getElementById(id),escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const price=n=>n===null?'—':new Intl.NumberFormat('en-US',{maximumFractionDigits:4}).format(n);
 const time=v=>new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(v))+' ET';

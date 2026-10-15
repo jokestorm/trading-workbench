@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6
+
+- Fix Market Analyze and manual position changes after moving the position form
+  beside the chart. Retain control references across layout changes and add a
+  DOM regression test covering Analyze, positions, contract switching, and journal
+  review.
+
 ## 0.1.5
 
 - Show the latest observed quote as a separate gold marker on the minute chart,
