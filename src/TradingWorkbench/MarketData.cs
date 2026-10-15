@@ -33,6 +33,14 @@ public sealed class MarketStore
 }
 public static class MarketRoutes
 {
+    public static async Task<MarketQuote> RefreshForAnalysis(MarketStore store,SchwabConnection connection,AnalysisRequest request,CancellationToken token)
+    {
+        if(request.Source=="bars")
+        {
+            var bars=await connection.PriceHistory(request.Symbol!,token);token.ThrowIfCancellationRequested();store.SaveBars(bars);
+        }
+        var quote=await connection.Quote(request.Symbol!,token);token.ThrowIfCancellationRequested();store.SaveQuote(quote);return quote;
+    }
     public static void Map(WebApplication app,MarketStore store,SchwabConnection connection){
         var contracts=new FutureContracts(connection);
         async Task<IResult> Run(Func<Task<object>> action){try{return Results.Ok(await action());}catch(FormatException e){return Results.BadRequest(new{message=e.Message});}catch(Exception e) when(e is HttpRequestException or TaskCanceledException){return Results.Json(new{message="Schwab request failed. Saved data remains available; try again."},statusCode:502);}}

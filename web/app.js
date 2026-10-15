@@ -4,7 +4,7 @@ import { filterTrades, netPnl, summarize, dateRange, easternToday } from './anal
 import { mountImport } from './import.js?v=ha-0.1.2';
 import { mountReports, renderReports } from './reports.js?v=ha-0.1.2';
 import { mountMarket } from './market.js?v=ha-0.1.2';
-import { mountAI } from './ai.js?v=ha-0.1.2';
+import { mountAI } from './ai.js?v=background-1';
 import { mountMonitor } from './market-monitor.js?v=ha-0.1.2';
 
 const $ = id => document.getElementById(id);

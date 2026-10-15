@@ -1,14 +1,37 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {runAnalysis} from '../web/ai.js';
-test('one market action updates the selected instrument then sends only the prepared token for analysis',async()=>{
- const input={kind:'saved-market',symbol:'/MESZ26',source:'bars',days:3},calls=[],events=[],signal=new AbortController().signal;
- const run=await runAnalysis(input,{signal,onMarketUpdated:()=>events.push('updated'),request:async(path,body,receivedSignal)=>{assert.equal(receivedSignal,signal);calls.push({path,body});if(path==='ai/preview')return{token:'snapshot-token'};return{id:'result'};}});
- assert.equal(run.id,'result');assert.deepEqual(calls,[{path:'market/backfill',body:{symbol:'/MESZ26'}},{path:'market/capture',body:{symbol:'/MESZ26'}},{path:'ai/preview',body:input},{path:'ai/analyze',body:{token:'snapshot-token'}}]);assert.deepEqual(events,['updated']);
+import {createAnalysisRuns,activeRun} from '../web/analysis-runs.js';
+function harness(request,onCompleted=async()=>{}){
+ const states=[],timers=[];
+ const runs=createAnalysisRuns({request,onCompleted,onChange:state=>states.push(state),schedule:fn=>{timers.push(fn);return timers.length;},unschedule:()=>{}});
+ return {runs,states,timers};
+}
+test('Analyze submits one request without browser-side refresh or preview ordering',async()=>{
+ const input={kind:'saved-market',symbol:'/MESZ26',position:{state:'FLAT'}},calls=[];
+ const {runs,states}=harness(async(path,body)=>{calls.push({path,body});return{id:'a',state:'refreshing',active:true};});
+ await runs.start(input);await runs.start({kind:'journal'});
+ assert.deepEqual(calls,[{path:'ai/runs',body:input}]);assert.equal(states.at(-1).job.id,'a');
 });
-test('a market update failure never starts AI',async()=>{
- const calls=[];await assert.rejects(runAnalysis({kind:'saved-market',symbol:'AAPL',source:'quotes'},{request:async path=>{calls.push(path);throw new Error('Schwab disconnected');}}),/disconnected/);assert.deepEqual(calls,['market/capture']);
+test('reopening observes active work and its saved completion without resubmitting',async()=>{
+ const calls=[],finished=[];let job={id:'existing',state:'analyzing',active:true};
+ const {runs}=harness(async path=>{calls.push(path);return {run:job};},async value=>finished.push(value.resultId));
+ await runs.check();job={id:'existing',state:'completed',resultId:'saved'};await runs.check();await runs.check();
+ assert.deepEqual(calls,['ai/runs/current','ai/runs/current','ai/runs/current']);assert.deepEqual(finished,['saved']);
+ runs.dispose();assert.equal(activeRun(job),false);
 });
-test('journal analysis stays local until the AI call and never fetches market data',async()=>{
- const calls=[];await runAnalysis({kind:'journal',filters:{symbol:'AAPL'}},{request:async path=>{calls.push(path);return{token:'journal-token'};}});assert.deepEqual(calls,['ai/preview','ai/analyze']);
+test('connection failure preserves active status; explicit Cancel is a separate request',async()=>{
+ let failing=false;const calls=[];
+ const {runs,states,timers}=harness(async path=>{calls.push(path);if(failing)throw new Error('Offline');return path.endsWith('/cancel')?{id:'a',state:'canceled'}:{run:{id:'a',state:'analyzing',active:true}};});
+ await runs.check();failing=true;await runs.check();
+ assert.equal(states.at(-1).job.id,'a');assert.equal(states.at(-1).error,'Offline');assert.ok(timers.length);
+ failing=false;await runs.cancel();assert.equal(states.at(-1).job.state,'canceled');assert.equal(calls.at(-1),'ai/runs/a/cancel');
+});
+test('a stale poll cannot overwrite a newly admitted run',async()=>{
+ let resolve;const {runs,states}=harness(path=>path==='ai/runs/current'?new Promise(r=>resolve=r):Promise.resolve({id:'new',state:'preparing',active:true}));
+ const check=runs.check();await runs.start({kind:'journal'});resolve({run:{id:'old',state:'completed'}});await check;
+ assert.equal(states.at(-1).job.id,'new');
+});
+test('interrupted runs remain retryable and closing the observer never cancels server work',async()=>{
+ const calls=[];const {runs,states}=harness(async path=>{calls.push(path);return{run:{id:'old',state:'interrupted'}};});
+ await runs.check();assert.equal(activeRun(states.at(-1).job),false);runs.dispose();await runs.check();assert.deepEqual(calls,['ai/runs/current']);
 });

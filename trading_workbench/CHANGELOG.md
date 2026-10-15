@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Consolidate market refresh, frozen inputs, execution, guards, and saving behind
+  one background analysis workflow shared by Market and Journal.
+- Reconnect to progress after leaving the page; allow explicit cancellation and
+  show an existing active run instead of queuing duplicate requests.
+- Preserve run status across restarts and mark unfinished work interrupted without
+  automatically resubmitting it.
+
 ## 0.1.2
 
 - Bundle Codex CLI 0.162.1 for ARM64 and add Sign in with ChatGPT using a device

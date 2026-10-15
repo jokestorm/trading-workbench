@@ -85,19 +85,19 @@ public sealed class SchwabConnection
             Persist(vault with{Tokens=tokens});
         }finally{gate.Release();}
     }
-    private async Task<SchwabTokens> Exchange(Dictionary<string,string> form,SchwabTokens? previous)
+    private async Task<SchwabTokens> Exchange(Dictionary<string,string> form,SchwabTokens? previous,CancellationToken token=default)
     {
         using var request=new HttpRequestMessage(HttpMethod.Post,"https://api.schwabapi.com/v1/oauth/token");
         request.Headers.Authorization=new("Basic",Convert.ToBase64String(Encoding.UTF8.GetBytes(vault!.Settings.AppKey+":"+vault.Settings.AppSecret)));
         request.Content=new FormUrlEncodedContent(form);
-        using var response=await http.SendAsync(request);
+        using var response=await http.SendAsync(request,token);
         if(!response.IsSuccessStatusCode)
         {
             if(previous is not null&&response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized){Persist(vault with{Tokens=null});throw new FormatException("Schwab authorization needs renewal. Authorize again.");}
             throw new FormatException($"Schwab token exchange failed (HTTP {(int)response.StatusCode}). Check app approval, credentials and callback URL, then authorize again.");
         }
         try{
-            using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync());var root=json.RootElement;
+            using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));var root=json.RootElement;
             var access=root.GetProperty("access_token").GetString();var refresh=root.TryGetProperty("refresh_token",out var r)?r.GetString():previous?.RefreshToken;
             var seconds=root.GetProperty("expires_in").GetInt32();
             if(string.IsNullOrWhiteSpace(access)||string.IsNullOrWhiteSpace(refresh)||seconds<=0)throw new JsonException();
@@ -108,33 +108,33 @@ public sealed class SchwabConnection
     {
         await gate.WaitAsync();try{if(vault is not null)Persist(vault with{Tokens=null});state=null;}finally{gate.Release();}
     }
-    public async Task<MarketQuote> Quote(string symbol)
+    public async Task<MarketQuote> Quote(string symbol,CancellationToken token=default)
     {
         symbol=symbol?.Trim().ToUpperInvariant()??"";
         if(symbol.Length is <1 or >32||symbol.Any(c=>!char.IsAsciiLetterOrDigit(c)&&c is not ('/' or '.' or '$' or '-' or ':')))throw new FormatException("Enter one equity or futures symbol.");
-        await gate.WaitAsync();try{
+        await gate.WaitAsync(token);try{
             if(vault?.Tokens is null)throw new FormatException("Authorize Schwab first.");
-            if(vault.Tokens.AccessExpiresAt<=DateTimeOffset.UtcNow.AddSeconds(60))Persist(vault with{Tokens=await Exchange(new(){{"grant_type","refresh_token"},{"refresh_token",vault.Tokens.RefreshToken}},vault.Tokens)});
+            if(vault.Tokens.AccessExpiresAt<=DateTimeOffset.UtcNow.AddSeconds(60))Persist(vault with{Tokens=await Exchange(new(){{"grant_type","refresh_token"},{"refresh_token",vault.Tokens.RefreshToken}},vault.Tokens,token)});
             using var request=new HttpRequestMessage(HttpMethod.Get,QueryHelpers.AddQueryString("https://api.schwabapi.com/marketdata/v1/quotes","symbols",symbol));
             request.Headers.Authorization=new("Bearer",vault.Tokens!.AccessToken);
-            using var response=await http.SendAsync(request);
+            using var response=await http.SendAsync(request,token);
             if(response.StatusCode==HttpStatusCode.Unauthorized){Persist(vault with{Tokens=null});throw new FormatException("Schwab rejected the access token. Authorize again.");}
             if(!response.IsSuccessStatusCode)throw new FormatException($"Schwab quote request failed (HTTP {(int)response.StatusCode}). Check Market Data access and the symbol.");
-            try {using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync());return ParseQuote(json.RootElement,symbol,DateTimeOffset.UtcNow);}
+            try {using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));return ParseQuote(json.RootElement,symbol,DateTimeOffset.UtcNow);}
             catch(Exception error) when(error is JsonException or InvalidOperationException or ArgumentOutOfRangeException){throw new FormatException("Schwab returned an unexpected quote response.");}
         }finally{gate.Release();}
     }
-    public async Task<PriceBar[]> PriceHistory(string symbol)
+    public async Task<PriceBar[]> PriceHistory(string symbol,CancellationToken token=default)
     {
-        symbol=MarketStore.Symbol(symbol);await gate.WaitAsync();try{
+        symbol=MarketStore.Symbol(symbol);await gate.WaitAsync(token);try{
             if(vault?.Tokens is null)throw new FormatException("Authorize Schwab first.");
-            if(vault.Tokens.AccessExpiresAt<=DateTimeOffset.UtcNow.AddSeconds(60))Persist(vault with{Tokens=await Exchange(new(){{"grant_type","refresh_token"},{"refresh_token",vault.Tokens.RefreshToken}},vault.Tokens)});
+            if(vault.Tokens.AccessExpiresAt<=DateTimeOffset.UtcNow.AddSeconds(60))Persist(vault with{Tokens=await Exchange(new(){{"grant_type","refresh_token"},{"refresh_token",vault.Tokens.RefreshToken}},vault.Tokens,token)});
             var now=DateTimeOffset.UtcNow;
             var url=QueryHelpers.AddQueryString("https://api.schwabapi.com/marketdata/v1/pricehistory",new Dictionary<string,string?>{{"symbol",symbol},{"periodType","day"},{"frequencyType","minute"},{"frequency","1"},{"startDate",now.AddDays(-7).ToUnixTimeMilliseconds().ToString()},{"endDate",now.ToUnixTimeMilliseconds().ToString()},{"needExtendedHoursData","true"}});
-            using var request=new HttpRequestMessage(HttpMethod.Get,url);request.Headers.Authorization=new("Bearer",vault.Tokens!.AccessToken);using var response=await http.SendAsync(request);
+            using var request=new HttpRequestMessage(HttpMethod.Get,url);request.Headers.Authorization=new("Bearer",vault.Tokens!.AccessToken);using var response=await http.SendAsync(request,token);
             if(response.StatusCode==HttpStatusCode.Unauthorized){Persist(vault with{Tokens=null});throw new FormatException("Schwab authorization needs renewal. Authorize again.");}
             if(!response.IsSuccessStatusCode)throw new FormatException($"Schwab history request failed (HTTP {(int)response.StatusCode}). Historical data may be unsupported for this symbol; use quote snapshots instead.");
-            try {using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync());return ParseHistory(json.RootElement,symbol,now);}catch(Exception e) when(e is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentOutOfRangeException){throw new FormatException("Unexpected historical data from Schwab. No bars saved.");}
+            try {using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));return ParseHistory(json.RootElement,symbol,now);}catch(Exception e) when(e is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentOutOfRangeException){throw new FormatException("Unexpected historical data from Schwab. No bars saved.");}
         }finally{gate.Release();}
     }
     public static PriceBar[] ParseHistory(JsonElement root,string symbol,DateTimeOffset fetched)

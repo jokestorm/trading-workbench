@@ -49,6 +49,15 @@ Journal analysis shares the same login. Check connection, Cancel sign-in, and
 Sign out are available in the connection section. Analysis sends the selected
 snapshot to OpenAI using the ChatGPT account; it does not place broker orders.
 
+One analysis runs at a time across Market and Journal. Progress appears in both
+sections. You can close the page or lose your phone connection; the run continues
+and the app reconnects to its progress or saved result when reopened. Use Cancel
+to stop it explicitly. Restarting the app interrupts unfinished analysis without
+automatically submitting another request. Start a fresh analysis to retry.
+
+Run status is stored under `/data/workbench/analysis/jobs`; completed results
+remain in `/data/workbench/analysis`. Both survive app updates and restarts.
+
 The app uses `/data/workbench/codex` for its own Codex credentials. This directory
 survives restarts and updates and is included in app backups. Codex manages token
 refresh. Its file credential cache is plaintext in private storage, so protect

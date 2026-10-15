@@ -6,7 +6,6 @@ namespace TradingWorkbench;
 public record AnalysisPosition(string State="UNKNOWN",int? Quantity=null,decimal? AverageEntry=null);
 public record TradeDecision(string Action,string Reason,decimal? Entry,decimal? Stop,decimal? Target,bool Guarded=false);
 public record AnalysisRequest(string Kind,TradeFilter? Filters=null,bool IncludeNotes=false,string? Symbol=null,string Source="bars",int Days=7,AnalysisPosition? Position=null);
-public record AnalysisCommit(string Token);
 public record AnalysisPreview(string Token,string Kind,DateTimeOffset ExpiresAt,JsonElement Snapshot);
 public record AnalysisResult(string Summary,string Assessment,string[] Evidence,string[] Limitations,string[] NextSteps,string Invalidation,TradeDecision? Decision=null);
 public record AnalysisRun(string Id,string Kind,DateTimeOffset CreatedAt,string Provider,string Model,string PromptVersion,JsonElement Snapshot,AnalysisResult Result);
@@ -93,7 +92,7 @@ public sealed class AnalysisService
     private readonly Dictionary<string,AnalysisPreview> previews=new();private readonly SemaphoreSlim gate=new(1,1);
     private readonly MarketStore? market;
     public AnalysisService(TradeStore trades,IAnalysisProvider provider,string directory,MarketStore? market=null){this.trades=trades;this.provider=provider;this.directory=directory;this.market=market;Directory.CreateDirectory(directory);}
-    public AnalysisPreview Preview(AnalysisRequest request)
+    public AnalysisPreview Preview(AnalysisRequest request,MarketQuote? refreshedQuote=null)
     {
         object snapshot;
         if(request.Kind=="journal"){
@@ -105,7 +104,7 @@ public sealed class AnalysisService
             data["position"]=JsonSerializer.SerializeToNode(new{position.State,position.Quantity,position.AverageEntry,source="Manual input for this dated contract; not broker verified",providedAt=DateTimeOffset.UtcNow},CodexAnalysisProvider.Json);
             var symbol=MarketStore.Symbol(request.Symbol);var root=symbol.TrimStart('/');var instrument=InstrumentCatalog.All.FirstOrDefault(i=>root.StartsWith(i.Root,StringComparison.Ordinal));
             data["pointValue"]=instrument?.PointValue;data["tickSize"]=root.StartsWith("MES")?.25m:root.StartsWith("MGC")?.1m:root.StartsWith("MCL")?.01m:1m;
-            data["latestQuote"]=JsonSerializer.SerializeToNode(market.Quotes(symbol).LastOrDefault(),CodexAnalysisProvider.Json);
+            data["latestQuote"]=JsonSerializer.SerializeToNode(refreshedQuote??market.Quotes(symbol).LastOrDefault(),CodexAnalysisProvider.Json);
             snapshot=data;
         }else throw new FormatException("Choose journal, saved-market or sample-market analysis.");
         var preview=new AnalysisPreview(Guid.NewGuid().ToString("N"),request.Kind,DateTimeOffset.UtcNow.AddMinutes(20),JsonSerializer.SerializeToElement(snapshot,CodexAnalysisProvider.Json));
@@ -119,16 +118,24 @@ public sealed class AnalysisService
     }
     public async Task<AnalysisRun> Analyze(string token,CancellationToken cancellation)
     {
+        var run=await Execute(token,cancellation);cancellation.ThrowIfCancellationRequested();Save(run);return run;
+    }
+    internal async Task<AnalysisRun> Execute(string token,CancellationToken cancellation,string? runId=null)
+    {
         if(!await gate.WaitAsync(0,cancellation))throw new FormatException("An analysis is already running. Wait for it to finish.");
         try{
             AnalysisPreview preview;lock(previews){if(string.IsNullOrEmpty(token)||!previews.TryGetValue(token,out preview!)||preview.ExpiresAt<DateTimeOffset.UtcNow)throw new FormatException("Preview expired. Preview the data again.");previews.Remove(token);}
-            var id=Guid.NewGuid().ToString("N");var runDirectory=Path.Combine(directory,"runs",id);Directory.CreateDirectory(runDirectory);
+            var id=runId??Guid.NewGuid().ToString("N");var runDirectory=Path.Combine(directory,"runs",id);Directory.CreateDirectory(runDirectory);
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);timeout.CancelAfter(TimeSpan.FromMinutes(4));
-            AnalysisResult result;try{result=await provider.Analyze(preview.Snapshot,runDirectory,timeout.Token);}catch(OperationCanceledException){throw new FormatException("Analysis was canceled or reached the four-minute limit. Preview again to retry.");}
+            AnalysisResult result;try{result=await provider.Analyze(preview.Snapshot,runDirectory,timeout.Token);}catch(OperationCanceledException){throw new FormatException("Analysis was canceled or reached the four-minute limit. Start a new analysis to retry.");}
             if(preview.Kind=="saved-market")result=DecisionRules.Apply(result,preview.Snapshot,DateTimeOffset.UtcNow);
             var run=new AnalysisRun(id,preview.Kind,DateTimeOffset.UtcNow,"Codex CLI · ChatGPT",provider is CodexAnalysisProvider codex?codex.Model:"Fixture provider",CodexAnalysisProvider.PromptVersion,preview.Snapshot,result);
-            var path=Path.Combine(directory,id+".json");await File.WriteAllTextAsync(path+".tmp",JsonSerializer.Serialize(run,CodexAnalysisProvider.Json));File.Move(path+".tmp",path);return run;
+            return run;
         }finally{gate.Release();}
+    }
+    internal void Save(AnalysisRun run)
+    {
+        var path=Path.Combine(directory,run.Id+".json");File.WriteAllText(path+".tmp",JsonSerializer.Serialize(run,CodexAnalysisProvider.Json));File.Move(path+".tmp",path);
     }
     public AnalysisRun[] History()=>Directory.GetFiles(directory,"*.json").Select(path=>JsonSerializer.Deserialize<AnalysisRun>(File.ReadAllText(path),CodexAnalysisProvider.Json)!).OrderByDescending(r=>r.CreatedAt).Take(50).ToArray();
     public AnalysisRun Find(string id)
@@ -140,7 +147,5 @@ public sealed class AnalysisService
     {
         app.MapGet("/api/ai/status",()=>provider.Status());app.MapGet("/api/ai/history",()=>service.History());
         app.MapGet("/api/ai/outcomes",(string id)=>{try{return Results.Ok(service.Outcomes(id));}catch(FormatException e){return Results.BadRequest(new{message=e.Message});}});
-        app.MapPost("/api/ai/preview",(AnalysisRequest request)=>{try{return Results.Ok(service.Preview(request));}catch(FormatException e){return Results.BadRequest(new{message=e.Message});}});
-        app.MapPost("/api/ai/analyze",async(AnalysisCommit request,HttpContext context)=>{try{return Results.Ok(await service.Analyze(request.Token,context.RequestAborted));}catch(FormatException e){return Results.BadRequest(new{message=e.Message});}});
     }
 }

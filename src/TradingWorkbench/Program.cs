@@ -2,7 +2,9 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if(args.Contains("--workflow-test")){await AnalysisWorkflowChecks.Run();return;}
+if(args.Contains("--workflow-crash")){await AnalysisWorkflowChecks.Crash(args[Array.IndexOf(args,"--workflow-crash")+1]);return;}
 if(args.Contains("--codex-probe")){await CodexLoginChecks.Probe();return;}
 if(args.Contains("--ai-smoke")){await AnalysisChecks.Run(true);return;}
 if(args.Contains("--review-statement"))
@@ -32,6 +34,7 @@ var aiProvider=new CodexAnalysisProvider(builder.Configuration["CodexExecutable"
 await using var codexLogin=new CodexLoginService(()=>new CodexLoginSession(aiProvider),aiProvider.Status,aiProvider.Logout,aiProvider.EnterOperation);
 var market=new MarketStore(app.Configuration["DataDirectory"]??Path.Combine(root,"data"));
 var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market);
+await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis","jobs"),(request,token)=>MarketRoutes.RefreshForAnalysis(market,schwab,request,token));
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
 app.Use(async (context, next) =>
 {
@@ -50,6 +53,7 @@ app.MapGet("/api/status", () => new { stage = 5, aiPilot=true, storage = "SQLite
 SchwabRoutes.Map(app,schwab);
 MarketRoutes.Map(app,market,schwab);
 AnalysisService.Map(app,analysis,aiProvider);
+AnalysisWorkflow.Map(app,analysisWorkflow);
 CodexLoginService.Map(app,codexLogin);
 app.MapGet("/api/analytics",(HttpRequest request)=>
 {
