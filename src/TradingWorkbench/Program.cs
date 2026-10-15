@@ -2,7 +2,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
 if(args.Contains("--ai-smoke")){await AnalysisChecks.Run(true);return;}
 if(args.Contains("--review-statement"))
 {

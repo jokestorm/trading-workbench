@@ -72,7 +72,7 @@ Synthetic market analysis is for testing the workflow, not a live signal. Journa
 
 ## Schwab connection
 
-In **Market monitor**, enter the app key, app secret and exact registered HTTPS loopback callback URL from the [Schwab Developer Portal](https://developer.schwab.com/). Keep credentials in the app's local fields, not chat. Save settings now; authorize after app approval and Market Data access are available.
+In **Market monitor**, enter the Client ID, Client Secret and exact registered HTTPS loopback callback URL from the [Schwab Developer Portal](https://developer.schwab.com/). Keep credentials in the app's local fields, not chat. Save settings now; authorize after app approval and Market Data access are available.
 
 1. Click **Start authorization**, then the generated Schwab link. Sign in directly with Schwab.
 2. After consent, copy the complete callback URL from the address bar. This stage does not run an HTTPS callback listener, so the callback page may fail to load; the address still contains the returned code and state.
@@ -87,46 +87,40 @@ The implementation was checked against the [schwab-py OAuth client source](https
 
 ## thinkorswim account statements
 
-Choose the original statement in **Import CSV**. It is detected automatically, so manual column mapping is unnecessary. Use a stable account label and the correct execution timezone (Eastern / EDT for the supplied statement). Preview displays completed trades, both fee categories, open snapshots, and settlement/cash reconciliation before saving.
+Choose the original statement in **Import CSV**. The app checks it automatically, assumes Eastern time, and uses the fixed account label `Schwab futures`. Select **Import statement** to save new trades. Detailed reconciliation and open snapshots are available under **Statement details**.
 
 - Actual fills come from **Futures Statements**, matched individually to **Account Trade History**, including identical split fills sharing an order reference.
-- Execution date is used instead of futures trade date. Eastern and Central execution timezones are supported; invalid/ambiguous DST timestamps are rejected.
+- Execution date is used instead of futures trade date. The personal import screen assumes Eastern time; invalid/ambiguous DST timestamps are rejected.
 - Canceled/rejected orders, requested order prices, transfers, YTD totals and equity holdings do not become completed trades.
 - Separate open snapshots are excluded from closed-trade metrics and are not live positions. Their display remains the latest imported statement snapshot when date filters change.
 - A statement with unknown starting holdings, unmatched executions, unsupported instruments, a holdings discrepancy, or a cash reconciliation discrepancy cannot be committed.
 - Open positions with prior partial exits are not supported yet; the importer blocks those cases.
-- Later statements must include consistent overlapping opening history for saved open positions. They cannot silently replace that history.
+- Rolling statements can restore omitted opening fills from saved statements for the same account and timezone. Overlapping coverage and matching opening cash are required. Earlier saved history can span multiple imports; corrected executions cannot silently overwrite saved trades.
+- Reconciliation includes the restored history and is labeled accordingly. Only new closed trades are added, and current statement holdings replace the earlier open snapshot. A flat statement may omit the Futures holdings section.
 
 The statement adapter reconciles execution fees, open inventory, and the settlement ledger. Schema migrations create backups before changing journal storage.
 
 ## CSV import
 
-In **My trades**, choose **Import CSV**, select a file, check its column mapping and defaults, then **Preview import**. Review calculated trades, warnings, errors and duplicates before committing. All errors must be resolved; no partial batch is saved.
+In **My trades**, choose **Import CSV**, select your Schwab / thinkorswim account
+statement, then select **Import statement** once automatic checks finish. There
+are no column mappings, point-value defaults, timezone selectors, or confirmation
+checkboxes. The tested futures statement format is required; generic execution
+CSVs are no longer offered by the personal import screen.
 
-- Generic files: UTF-8 comma-separated CSV, first row headers, one account per file, at most 2 MB / 5,000 executions. Recognized statements have their sections extracted automatically.
-- Required columns: symbol, buy/sell side, positive quantity, price, and full execution timestamp.
-- Optional columns: execution ID, total fees, asset type, point value. An unmapped fee column means zero fees and generates a warning.
-- Timestamps: `yyyy-MM-dd HH:mm[:ss]`, ISO local `yyyy-MM-ddTHH:mm[:ss]`, or `M/d/yyyy H:mm[:ss]`, all in Eastern Time.
-- Sides: BUY/SELL, BOT/SOLD, or BOUGHT/SOLD. Account balance movements, dividends, orders, options, and date-only transactions are rejected rather than interpreted as executions.
-- The file must include complete flat-to-flat history. Unclosed positions block the batch. A sell-first record is treated as a short entry only after the user confirms starting flat.
-- Same-timestamp executions use CSV row order; mixed-side ties generate a warning.
-- Mixed instruments need correct per-row type/point values. Include all commissions/charges in one positive fee column.
-- Stable execution IDs are preferred. Without them, identity uses normalized execution values; identical fills need distinct IDs. Changes to prior sources or overlapping regroupings require reconciliation and are not silently overwritten.
-- Manual trades are not matched automatically to CSV executions. Potential same-day overlap is flagged.
+Existing duplicate detection and reconciliation remain authoritative. Errors
+block the entire import. Fees and point values come from the statement adapter.
+Imported open positions are statement snapshots, separate from closed P/L.
+Original statements and pre-import backups stay in private runtime storage.
 
-The importer stores the original CSV and mapping, allocated execution records, and a backup before every nonempty import. Schema 1 databases also get a backup before migration to schema 2. Imported IDs remain stable; repeated imports preserve journal metadata.
+## Chart navigation
 
-Synthetic CSV fixtures are kept under `tests/fixtures/` for isolated import checks; they are not served or offered in the app.
-
-Saved data lives in `data/trading.db`, excluded from source control. Each manual trade stores entry and exit fills in the same transaction. UI rendering, analytics, and backend persistence are separate modules; the simple frontend remains in place.
-
-Use **Download backup** in My trades to save a consistent database copy. To restore: stop the application, keep a copy of the existing `data/trading.db`, replace it with the downloaded backup named `trading.db`, and restart. Restore was checked against an isolated fixture database.
-
-`server.mjs` is retained only for the old static preview (`node server.mjs`); it does not support saved-trade APIs. Use the .NET host for normal operation.
-
-See [the staged plan](docs/implementation-plan.md). Next checkpoint: review saved market charts and AI analysis on actual bars. Then add outcome evaluation or unattended collection according to usefulness.
-
-The default watchlist is /MES, /MGC and /MCL. Root symbols resolve to dated contracts using Schwab active-contract metadata when available; otherwise the highest-volume quoted, unexpired contract among nearby quarterly MES, primary even-month MGC, or monthly MCL candidates is selected. Resolutions are cached for one hour, checked on price updates, and rechecked hourly while Market monitor is visible. The selected dated symbol is shown explicitly; bars, quotes, analysis snapshots and follow-ups remain keyed to that dated contract. Dated symbols in watchlist options stay pinned. MES/MGC/MCL without a leading slash are accepted as auto roots. The chart opens at four hours of saved observations, with zoom buttons, a full-range reset, larger axes and a cursor readout that selects actual observations without interpolation.
+Drag horizontally across the price plot to select a time interval. Scroll over
+the plot to zoom around the pointer. Only the time axis is selected; prices
+rescale automatically from observations inside the visible interval. Zoom buttons
+remain available, and **Full range** restores all loaded history. Zooming uses
+cached observations and does not call Schwab. Changing instrument, data source,
+or history range resets the view. Historical gaps remain unfilled.
 
 ## Position-aware day-trading recommendations
 

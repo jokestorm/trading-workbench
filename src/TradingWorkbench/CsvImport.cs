@@ -151,9 +151,11 @@ public class ImportService(TradeStore store)
     {
         if(request.Csv is null || request.Columns is null || request.FileName is null)throw new FormatException("CSV, filename and column mapping are required.");
         if(request.Csv.Length>2_000_000)throw new FormatException("CSV must be smaller than 2 MB.");
-        var statement=ThinkorswimStatement.IsStatement(request.Csv)?ThinkorswimStatement.Normalize(request):null;
+        var extended=false;
+        var statement=ThinkorswimStatement.IsStatement(request.Csv)?ThinkorswimStatement.Normalize(StatementHistory.Extend(request,store.StatementHistory(request.Account),out extended)):null;
         var built=CsvImporter.Build(statement?.Normalized??request,statement is not null);var newTrades=new List<ImportedTrade>();var duplicates=0;
         var reconciliation=statement?.Reconcile(built.Trades,built.OpenPositions);
+        if(extended)built.Warnings.Add("Saved statement history restores opening executions omitted by this rolling statement. Reconciliation totals cover the combined history; only new closed trades are imported.");
         if(reconciliation is not null)
         {
             var observed=built.Trades.SelectMany(t=>t.Executions).Concat(built.OpenPositions.SelectMany(p=>p.Executions)).DistinctBy(f=>f.Id).ToDictionary(f=>f.Id,f=>f.SourceFingerprint);

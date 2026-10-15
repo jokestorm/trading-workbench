@@ -1,10 +1,10 @@
 import { fetchApp, appUrl } from './http.js';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=decisions-2';
-import { mountImport } from './import.js?v=decisions-2';
-import { mountReports, renderReports } from './reports.js?v=decisions-2';
-import { mountMarket } from './market.js?v=decisions-2';
-import { mountAI } from './ai.js?v=decisions-2';
-import { mountMonitor } from './market-monitor.js?v=decisions-2';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.1';
+import { mountImport } from './import.js?v=ha-0.1.1';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.1';
+import { mountMarket } from './market.js?v=ha-0.1.1';
+import { mountAI } from './ai.js?v=ha-0.1.1';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.1';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;

@@ -126,6 +126,18 @@ public class TradeStore
         if(List().Any(t=>t.Source=="CSV" && t.Account==candidate.Trade.Account && t.Symbol==candidate.Trade.Symbol && ((DateTime.Parse(t.OpenedAt,CultureInfo.InvariantCulture)<end && DateTime.Parse($"{t.Date}T{t.Time}",CultureInfo.InvariantCulture)>start) || (t.OpenedAt==candidate.Trade.OpenedAt && t.Date==candidate.Trade.Date && t.Time==candidate.Trade.Time))))return "This period overlaps an imported trade with different execution identities. Reconcile it before importing.";
         return "new";
     }
+    public ImportRequest[] StatementHistory(string account)
+    {
+        using var db=Open();using var query=db.CreateCommand();
+        query.CommandText="SELECT raw_csv,mapping FROM import_batches ORDER BY imported_at";
+        using var reader=query.ExecuteReader();var result=new List<ImportRequest>();
+        while(reader.Read())
+        {
+            var request=JsonSerializer.Deserialize<ImportRequest>(reader.GetString(1),Json)!;
+            if(request.Account.Trim()==account.Trim()&&ThinkorswimStatement.IsStatement(reader.GetString(0)))result.Add(request with{Csv=reader.GetString(0)});
+        }
+        return result.ToArray();
+    }
     public void CommitImport(ImportPreview preview,ImportRequest request)
     {
         if(preview.Trades.Length==0 && preview.Reconciliation is null)return;

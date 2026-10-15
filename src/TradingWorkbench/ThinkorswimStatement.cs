@@ -47,7 +47,7 @@ public static class ThinkorswimStatement
         var rows=CsvReader.Parse(request.Csv);
         List<string[]> Section(string name)
         {
-            var start=rows.FindIndex(r=>r.Length==1&&r[0]==name);if(start<0)throw new FormatException($"Statement section missing: {name}.");
+            var start=rows.FindIndex(r=>r.Length==1&&r[0]==name);if(start<0)return name=="Futures"?[]:throw new FormatException($"Statement section missing: {name}.");
             var end=rows.FindIndex(start+1,r=>r.Length==1);if(end<0)end=rows.Count;
             return rows.Skip(start+2).Take(end-start-2).ToList();
         }

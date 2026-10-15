@@ -52,10 +52,10 @@ public sealed class SchwabConnection
         await gate.WaitAsync();try{
             var key=input.AppKey?.Trim()??"";var secret=input.AppSecret?.Trim()??"";var callback=input.CallbackUrl?.Trim()??"";
             if(key.Length==0&&vault is not null)key=vault.Settings.AppKey;
-            if(key.Length is <8 or >256||key.Any(char.IsWhiteSpace))throw new FormatException("Enter your Schwab app key.");
+            if(key.Length is <8 or >256||key.Any(char.IsWhiteSpace))throw new FormatException("Enter your Schwab Client ID.");
             if(!Uri.TryCreate(callback,UriKind.Absolute,out var uri)||uri.Scheme!="https"||!uri.IsLoopback||uri.UserInfo.Length>0||uri.Query.Length>0||uri.Fragment.Length>0)throw new FormatException("Use the exact registered HTTPS loopback callback URL (127.0.0.1 or localhost), without query parameters.");
             if(secret.Length==0&&key==vault?.Settings.AppKey)secret=vault.Settings.AppSecret;
-            if(secret.Length is <8 or >256||secret.Any(char.IsWhiteSpace))throw new FormatException("Enter your Schwab app secret. Leave it blank only when keeping the existing app key.");
+            if(secret.Length is <8 or >256||secret.Any(char.IsWhiteSpace))throw new FormatException("Enter your Schwab Client Secret. Leave it blank only when keeping the existing Client ID.");
             var settings=new SchwabSettings(key,secret,callback);Persist(new(settings,settings==vault?.Settings?vault.Tokens:null));state=null;
         }finally{gate.Release();}
     }
