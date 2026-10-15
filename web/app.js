@@ -1,11 +1,11 @@
 import { fetchApp, appUrl } from './http.js';
-import { mountJournalChart } from './journal-chart.js?v=ha-0.1.3';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.3';
-import { mountImport } from './import.js?v=ha-0.1.3';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.3';
-import { mountMarket } from './market.js?v=ha-0.1.3';
-import { mountAI } from './ai.js?v=ha-0.1.3';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.3';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.4';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.4';
+import { mountImport } from './import.js?v=ha-0.1.4';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.4';
+import { mountMarket } from './market.js?v=ha-0.1.4';
+import { mountAI } from './ai.js?v=ha-0.1.4';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.4';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;
@@ -88,7 +88,7 @@ $('trade-rows').addEventListener('click',async e=>{ const button=e.target.closes
   selectedTrade=t;$('edit-trade').hidden=false;$('detail-mode').textContent=`${t.source??'Manual'} · ${t.account??'Personal'}`;
   $('edit-trade').textContent=t.source==='CSV'?'Edit journal notes':'Edit trade';
   $('trade-detail').innerHTML=`<h1>${escape(t.symbol)}</h1><p>${t.date} · ${t.time} ET · ${t.direction} · ${escape(t.setup)}</p><div class="metric-value ${tone(netPnl(t))}">${money(netPnl(t),true)}</div><div class="detail-grid">${[['Quantity',t.quantity],['Fees',money(t.fees)],['Entry',number(t.entry)],['Exit',number(t.exit)],['Planned risk',t.risk?money(t.risk):'Not recorded'],['Net R',t.risk?(netPnl(t)/t.risk).toFixed(2)+'R':'Not available']].map(([k,v])=>`<div><small>${k}</small>${escape(v)}</div>`).join('')}</div><p class="trade-note">${escape(t.notes)}</p>`; $('trade-dialog').showModal();
-  {const section=document.createElement('div');section.className='fills-preview';section.textContent='Loading allocated fills…';$('trade-detail').append(section);try{const response=await fetchApp(`/api/trades/${t.id}/fills`);if(!response.ok)throw new Error();const fills=await response.json();section.innerHTML=`<h2>Allocated fills</h2><div class="table-wrap"><table><thead><tr><th>Role</th><th>Time ET</th><th class="numeric">Qty</th><th class="numeric">Price</th><th class="numeric">Fees</th></tr></thead><tbody>${fills.map(({role,execution:f})=>`<tr><td>${escape(role)}</td><td>${escape((f.timestamp??f.localTimeEastern??'').replace('T',' '))}</td><td class="numeric">${number(f.quantity)}</td><td class="numeric">${number(f.price)}</td><td class="numeric">${money(f.fees)}</td></tr>`).join('')}</tbody></table></div>${t.source==='CSV'?'<p class="small muted">A reversal execution may be split across two trades. Accounting comes from the allocated fills; average prices are for display.</p>':''}`;}catch{section.textContent='Could not load fills.';}}
+  {const section=document.createElement('div');section.className='fills-preview';section.textContent='Loading allocated fills…';$('trade-detail').append(section);try{const response=await fetchApp(`/api/trades/${t.id}/fills`);if(!response.ok)throw new Error();const fills=await response.json();section.innerHTML=`<h2>Allocated fills</h2><div class="table-wrap"><table><thead><tr><th>Role</th><th>Time ET</th><th class="numeric">Qty</th><th class="numeric">Price</th><th class="numeric">Fees</th></tr></thead><tbody>${fills.map(({role,execution:f})=>`<tr><td>${escape(role)}${f.externalId?.startsWith('tos:cash-settlement:')?' · Cash settlement':''}</td><td>${escape((f.timestamp??f.localTimeEastern??'').replace('T',' '))}</td><td class="numeric">${number(f.quantity)}</td><td class="numeric">${number(f.price)}</td><td class="numeric">${money(f.fees)}</td></tr>`).join('')}</tbody></table></div>${t.source==='CSV'?'<p class="small muted">A reversal execution may be split across two trades. Accounting comes from the allocated fills; average prices are for display.</p>':''}`;}catch{section.textContent='Could not load fills.';}}
 });
 $('close-dialog').addEventListener('click',()=>$('trade-dialog').close());
 $('trade-dialog').addEventListener('click',e=>{if(e.target===$('trade-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});

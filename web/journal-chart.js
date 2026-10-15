@@ -1,4 +1,4 @@
-import {timeBounds, clampWindow, zoomWindow, bindChartNavigation} from './chart-viewport.js?v=ha-0.1.3';
+import {timeBounds, clampWindow, zoomWindow, bindChartNavigation} from './chart-viewport.js?v=ha-0.1.4';
 
 const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(n);
 // Journal dates/times are already Eastern wall-clock values. Project them onto

@@ -155,6 +155,10 @@ public class ImportService(TradeStore store)
         var statement=ThinkorswimStatement.IsStatement(request.Csv)?ThinkorswimStatement.Normalize(StatementHistory.Extend(request,store.StatementHistory(request.Account),out extended)):null;
         var built=CsvImporter.Build(statement?.Normalized??request,statement is not null);var newTrades=new List<ImportedTrade>();var duplicates=0;
         var reconciliation=statement?.Reconcile(built.Trades,built.OpenPositions);
+        if(statement?.CashSettlementCloses>0)built.Warnings.Add($"Includes {statement.CashSettlementCloses} cash-settled expiration close(s). Exit prices are derived from the broker cash adjustment and preceding official settlement mark, not an exchange execution.");
+        foreach(var change in statement?.CashBalanceChanges??[])built.Warnings.Add($"Review unitemized cash adjustment on {change.Date}: {change.Amount.ToString("+0.00;-0.00;0.00",CultureInfo.InvariantCulture)} USD between reported daily balances. Its cause is unverified; it is separate from reported sweeps, fees and trade P/L.");
+        if(statement?.ClosingOrderContinuations>0)built.Warnings.Add("Split fills of a verified closing order cross through flat into a reversal. Ledger quantities determine the resulting positions; the order-level TO CLOSE label is retained only as source context.");
+        if(statement?.NearTimeMatches>0)built.Warnings.Add($"Matched {statement.NearTimeMatches} ledger posting(s) to Trade History within one second using identical contract, side, quantity and price. Reporting uses the matched execution time; ambiguous matches remain blocked.");
         if(extended)built.Warnings.Add("Saved statement history restores opening executions omitted by this rolling statement. Reconciliation totals cover the combined history; only new closed trades are imported.");
         if(reconciliation is not null)
         {

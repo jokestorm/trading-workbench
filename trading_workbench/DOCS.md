@@ -24,6 +24,26 @@ allow anonymous downloads. GHCR packages start private by default; change the
 package visibility explicitly if public downloads are intended. Do not use
 GitHub workflow tokens as long-lived HA credentials.
 
+## Statement cash settlements
+
+The importer recognizes `cash settle future` for a single unchanged open Micro
+Ether contract in its expiration month. It derives the closing price from the
+preceding official mark and the reported cash adjustment, verifies the price
+tick, and retains the closing fees. Preview warnings and allocated-fill labels
+identify the settlement-derived exit. Ambiguous positions or missing settlement
+basis remain blocked. Explicit cash sweeps stay separate from trade P/L. A change
+between reported daily opening balances with no ledger event is shown as an
+unitemized cash adjustment with its date and amount; its cause remains unverified.
+The preview flags these adjustments for review instead of claiming a clean cash
+reconciliation. Trade cashflows, fees, and holdings must still reconcile, and
+transaction-row balance errors remain blocked.
+
+Split fills may retain an order-level `TO CLOSE` label after the order reverses
+through flat. Continuations require the same verified order reference, contract,
+side, and source date. A ledger posting may match a Trade History execution within
+one second only when contract, side, quantity, and price agree and the nearby
+match is unique. Reporting uses the verified execution time; ambiguity is blocked.
+
 ## Data and credentials
 
 Start with an empty journal. No old database or credentials are bundled.

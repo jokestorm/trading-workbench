@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4
+
+- Report unitemized daily opening-cash changes separately from sweeps, fees, and
+  trade P/L, with visible preview warnings. Transaction-row cash errors still fail.
+- Handle split fills of verified closing orders that reverse through flat, and
+  unique one-second posting/execution timestamp differences. Keep execution
+  identities stable and reject ambiguous matches or missing opening history.
+
+- Recognize Micro Ether cash-settled expirations when one unchanged open contract,
+  its preceding official mark, and the cash ledger identify a valid settlement
+  price. Preserve fees, reconciliation, duplicate protection, and explicit
+  settlement-derived exit labels; reject ambiguous settlement events.
+
 ## 0.1.3
 
 - Recognize Micro Ether (MET) futures statements using the 0.1 contract point

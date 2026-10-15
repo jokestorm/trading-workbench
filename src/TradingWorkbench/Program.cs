@@ -2,8 +2,9 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
 if(args.Contains("--workflow-test")){await AnalysisWorkflowChecks.Run();return;}
+if(args.Contains("--settlement-test")){CashSettlementChecks.Run();return;}
 if(args.Contains("--workflow-crash")){await AnalysisWorkflowChecks.Crash(args[Array.IndexOf(args,"--workflow-crash")+1]);return;}
 if(args.Contains("--codex-probe")){await CodexLoginChecks.Probe();return;}
 if(args.Contains("--ai-smoke")){await AnalysisChecks.Run(true);return;}
@@ -11,9 +12,17 @@ if(args.Contains("--review-statement"))
 {
     var file=args[Array.IndexOf(args,"--review-statement")+1];
     var checkStore=new TradeStore(Path.Combine(Path.GetTempPath(),"statement-review-"+Guid.NewGuid().ToString("N")));
-    var preview=new ImportService(checkStore).Preview(new(Path.GetFileName(file),File.ReadAllText(file),new(),"Schwab futures","Futures",1,"Eastern"));
+    try
+    {
+    var reviewer=new ImportService(checkStore);
+    ImportRequest ReadStatement(string path)=>new(Path.GetFileName(path),File.ReadAllText(path),new(),"Schwab futures","Futures",1,"Eastern");
+    if(args.Contains("--prior-statement")){var prior=reviewer.Preview(ReadStatement(args[Array.IndexOf(args,"--prior-statement")+1]));if(prior.Errors.Length>0)throw new FormatException("The prior statement does not reconcile.");reviewer.Commit(prior.Token);}
+    var request=ReadStatement(file);var preview=reviewer.Preview(request);
+    if(args.Contains("--verify-reimport")&&preview.Errors.Length==0){reviewer.Commit(preview.Token);var repeat=reviewer.Preview(request);Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{newTrades=preview.Trades.Length,preview.Duplicates,reconciled=preview.Reconciliation?.Reconciled,errors=preview.Errors.Length,reimportNew=repeat.Trades.Length,reimportDuplicates=repeat.Duplicates,reimportErrors=repeat.Errors.Length}));return;}
     Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{preview.RowCount,closedTrades=preview.Trades.Length,preview.Errors,preview.Reconciliation,open=preview.OpenPositions.Select(p=>new{p.Symbol,p.Quantity,p.AverageEntry,p.EntryFees})},new System.Text.Json.JsonSerializerOptions{WriteIndented=true}));
     if(preview.Errors.Length>0)Environment.ExitCode=1;
+    }
+    catch(FormatException error){Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new{errors=new[]{new ImportIssue(0,error.Message)}}));Environment.ExitCode=1;}
     return;
 }
 var root = AppContext.BaseDirectory;
