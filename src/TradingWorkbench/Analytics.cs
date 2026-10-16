@@ -34,7 +34,7 @@ public static class Analytics
         var labels=new[]{"< −1k","−1k…−250","−250…−100","−100…0","$0","0…100","100…250","250…1k","> 1k"};
         var ranges=new[]{"P/L < -$1,000","-$1,000 ≤ P/L < -$250","-$250 ≤ P/L < -$100","-$100 ≤ P/L < $0","P/L = $0","$0 < P/L ≤ $100","$100 < P/L ≤ $250","$250 < P/L ≤ $1,000","P/L > $1,000"};
         var counts=new int[9];foreach(var v in values)counts[v< -1000?0:v< -250?1:v< -100?2:v<0?3:v==0?4:v<=100?5:v<=250?6:v<=1000?7:8]++;
-        return new{net,count=trades.Length,wins=winners.Length,losses=losers.Length,breakEven=values.Count(v=>v==0),winRate=trades.Length==0?(decimal?)null:(decimal)winners.Length/trades.Length,
+        return new{gross=trades.Sum(t=>t.GrossPnl),net,count=trades.Length,wins=winners.Length,losses=losers.Length,breakEven=values.Count(v=>v==0),winRate=trades.Length==0?(decimal?)null:(decimal)winners.Length/trades.Length,
             expectancy=trades.Length==0?(decimal?)null:net/trades.Length,profitFactor=losses>0?(decimal?)profits/losses:null,profitFactorIsInfinite=losses==0&&profits>0,
             averageWinner=winners.Length==0?(decimal?)null:winners.Average(),averageLoser=losers.Length==0?(decimal?)null:losers.Average(),largestWinner=winners.Length==0?(decimal?)null:winners.Max(),largestLoser=losers.Length==0?(decimal?)null:losers.Min(),
             fees=trades.Sum(t=>t.Fees),drawdown=maxDrawdown,currentDrawdown=peak-running,curve,

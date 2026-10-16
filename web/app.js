@@ -1,11 +1,12 @@
+import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.8';
 import { fetchApp, appUrl } from './http.js';
-import { mountJournalChart } from './journal-chart.js?v=ha-0.1.7';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.7';
-import { mountImport } from './import.js?v=ha-0.1.7';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.7';
-import { mountMarket } from './market.js?v=ha-0.1.7';
-import { mountAI } from './ai.js?v=ha-0.1.7';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.7';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.8';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.8';
+import { mountImport } from './import.js?v=ha-0.1.8';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.8';
+import { mountMarket } from './market.js?v=ha-0.1.8';
+import { mountAI } from './ai.js?v=ha-0.1.8';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.8';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;
@@ -74,8 +75,7 @@ async function render() {
   const positions=openPositions.filter(p=>(!filters.account||p.account===filters.account)&&(!filters.symbol||p.symbol===filters.symbol));
   positionsPanel.hidden=positions.length===0;
   positionsPanel.innerHTML=`<div class="panel-heading"><div><h2>Open positions · statement snapshot</h2><p>Excluded from closed-trade metrics. Latest imported statement; date filters do not change this snapshot.</p></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Instrument</th><th>Direction</th><th class="numeric">Qty</th><th class="numeric">Average entry</th><th class="numeric">Entry fees</th></tr></thead><tbody>${positions.map(p=>`<tr><td>${escape(p.account)}</td><td>${escape(p.symbol)}</td><td>${p.quantity>0?'LONG':'SHORT'}</td><td class="numeric">${Math.abs(p.quantity)}</td><td class="numeric">${number(p.averageEntry)}</td><td class="numeric">${money(p.entryFees)}</td></tr>`).join('')}</tbody></table></div>`;
-  const cards=[['Net P/L',money(summary.net,true),`${summary.count} closed trades · ${money(summary.fees)} fees`,tone(summary.net)],['Win rate',summary.winRate===null?'—':`${(summary.winRate*100).toFixed(1)}%`,`${summary.wins} wins / ${summary.losses} losses / ${summary.breakEven} flat`,''],['Expectancy',summary.expectancy===null?'—':money(summary.expectancy,true),'Average net P/L per trade',summary.expectancy===null?'':tone(summary.expectancy)],['Max drawdown',money(summary.drawdown),'Selected realized P/L curve','']];
-  $('metrics').innerHTML=cards.map(([label,value,caption,color])=>`<article class="metric"><div class="metric-label">${label}</div><div class="metric-value ${color}">${value}</div><div class="metric-caption">${caption}</div></article>`).join('');
+  $('metrics').innerHTML=renderJournalMetrics(summary);
   journalChart.update(summary.curve,query.toString()); $('chart-count').textContent=`${summary.count} trades`; $('trade-count').textContent=summary.count;
   renderReports(summary);
   $('trade-rows').innerHTML=selected.length?[...selected].reverse().map(t=>`<tr><td class="date-cell">${t.date.slice(0,10)}<small>${t.time}</small></td><td><strong>${escape(t.symbol)}</strong></td><td><span class="direction ${t.direction==='SHORT'?'short':''}">${t.direction}</span></td><td class="numeric">${t.quantity}</td><td class="numeric">${number(t.entry)}</td><td class="numeric">${number(t.exit)}</td><td class="numeric muted">${money(t.fees)}</td><td class="numeric ${tone(netPnl(t))}">${money(netPnl(t),true)}</td><td><button class="detail-button" data-trade="${t.id}" aria-label="Review ${escape(t.symbol)} trade on ${t.date} at ${t.time}">↗</button></td></tr>`).join(''):`<tr><td colspan="9" class="empty">${savedTrades.length===0?'Your journal is empty. Import a statement or add your first completed trade.':'No matching trades. Try another date range or reset the filters.'}</td></tr>`;

@@ -13,6 +13,7 @@ public static class AnalyticsChecks
             new TradeData{Id="c",Date="2026-10-02",Time="11:00",Symbol="AAPL",AccountingGrossPnl=0,Fees=0,Risk=null}};
         JsonElement Summary(TradeData[] trades)=>JsonSerializer.SerializeToElement(Analytics.Calculate(trades));
         var result=Summary(new TradeFilter().Apply(input));
+        Check(result.GetProperty("gross").GetDecimal()==50&&result.GetProperty("fees").GetDecimal()==15&&result.GetProperty("gross").GetDecimal()-result.GetProperty("fees").GetDecimal()==result.GetProperty("net").GetDecimal(),"gross trading P/L and separate fees reconcile to net P/L");
         Check(!result.TryGetProperty("setups",out _)&&!Analytics.Export(input).Split('\n')[0].Contains("Setup"),"journal reports and CSV exports omit removed setup categories");
         Check(result.GetProperty("curve").EnumerateArray().Select(p=>p.GetProperty("Time").GetString()).SequenceEqual(new[]{"10:00","10:00","11:00"}),"journal curve retains Eastern closing times for time-axis zoom");
         Check(result.GetProperty("net").GetDecimal()==35&&result.GetProperty("expectancy").GetDecimal()==35m/3&&result.GetProperty("breakEven").GetInt32()==1,"expectancy and win rate include break-even trades");

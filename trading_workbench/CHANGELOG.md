@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.8
+
+- Show gross trading P/L before costs in the main journal box and fees and
+  commissions in a separate box. Keep net P/L after costs in detailed statistics
+  and label the net P/L chart explicitly.
+
 ## 0.1.7
 
 - Remove journal setup tags from forms, filters, trade details, breakdowns, CSV

@@ -18,7 +18,7 @@ export function summarize(trades) {
   const labels=['< −1k','−1k…−250','−250…−100','−100…0','$0','0…100','100…250','250…1k','> 1k'];
   const ranges=['P/L < -$1,000','-$1,000 ≤ P/L < -$250','-$250 ≤ P/L < -$100','-$100 ≤ P/L < $0','P/L = $0','$0 < P/L ≤ $100','$100 < P/L ≤ $250','$250 < P/L ≤ $1,000','P/L > $1,000'];
   const counts=Array(9).fill(0);for(const v of values)counts[v< -1000?0:v< -250?1:v< -100?2:v<0?3:v===0?4:v<=100?5:v<=250?6:v<=1000?7:8]++;
-  return { net, count:trades.length, wins:winners.length, losses:losers.length, winRate:trades.length ? winners.length/trades.length : null,
+  return { gross:Math.round(trades.reduce((sum,t)=>sum+(Number.isFinite(t.grossPnl)?t.grossPnl:netPnl(t)+t.fees),0)*100)/100,net, count:trades.length, wins:winners.length, losses:losers.length, winRate:trades.length ? winners.length/trades.length : null,
     expectancy:trades.length ? net/trades.length : null, profitFactor:grossLosses ? grossWins/grossLosses : null,
     fees:trades.reduce((s,t)=>s+t.fees,0), drawdown, currentDrawdown:peak-running, curve,breakEven:values.filter(v=>v===0).length,
     averageWinner:average(winners),averageLoser:average(losers),profitFactorIsInfinite:!grossLosses&&grossWins>0,

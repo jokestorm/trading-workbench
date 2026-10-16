@@ -14,7 +14,7 @@ export function mountReports() {
 }
 export function renderReports(s) {
   const optional=(v,format=money)=>v===null?'—':format(v),r=v=>`${v.toFixed(2)}R`;
-  const stats=[['Profit factor',s.profitFactorIsInfinite?'∞':optional(s.profitFactor,v=>v.toFixed(2)),'Winning net / losing net'],['Average winner / loser',`${optional(s.averageWinner)} / ${optional(s.averageLoser)}`,'Break-even trades excluded'],['Current drawdown',money(s.currentDrawdown),'From the selected range peak'],['Mean / median R',`${optional(s.averageR,r)} / ${optional(s.medianR,r)}`,`${s.riskCount} of ${s.count} trades have risk (${s.riskCoverage===null?'—':(s.riskCoverage*100).toFixed(0)+'%'})`]];
+  const stats=[['Net P/L after fees',money(s.net),'Gross P/L less fees and commissions'],['Profit factor',s.profitFactorIsInfinite?'∞':optional(s.profitFactor,v=>v.toFixed(2)),'Winning net / losing net'],['Average winner / loser',`${optional(s.averageWinner)} / ${optional(s.averageLoser)}`,'Break-even trades excluded'],['Current drawdown',money(s.currentDrawdown),'From the selected range peak'],['Mean / median R',`${optional(s.averageR,r)} / ${optional(s.medianR,r)}`,`${s.riskCount} of ${s.count} trades have risk (${s.riskCoverage===null?'—':(s.riskCoverage*100).toFixed(0)+'%'})`]];
   document.getElementById('range-statistics').innerHTML=stats.map(([label,value,note])=>`<div><span class="small muted">${label}</span><strong>${value}</strong><span class="small muted">${note}</span></div>`).join('');
   document.getElementById('daily-report').innerHTML=s.count?bars(s.daily):empty;
   document.getElementById('instrument-report').innerHTML=s.count?bars(s.instruments):empty;
