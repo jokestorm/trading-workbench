@@ -1,12 +1,13 @@
-import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.8';
+import {mountPromptSettings} from './prompt-settings.js?v=ha-0.1.9';
+import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.9';
 import { fetchApp, appUrl } from './http.js';
-import { mountJournalChart } from './journal-chart.js?v=ha-0.1.8';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.8';
-import { mountImport } from './import.js?v=ha-0.1.8';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.8';
-import { mountMarket } from './market.js?v=ha-0.1.8';
-import { mountAI } from './ai.js?v=ha-0.1.8';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.8';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.9';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.9';
+import { mountImport } from './import.js?v=ha-0.1.9';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.9';
+import { mountMarket } from './market.js?v=ha-0.1.9';
+import { mountAI } from './ai.js?v=ha-0.1.9';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.9';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;
@@ -17,6 +18,7 @@ const escape = s => String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>'
 let trades = [], savedTrades = [], openPositions=[], selectedTrade = null, editingId = null, ready = false;
 let renderVersion=0;
 mountReports();
+mountPromptSettings($('prompt-settings'));
 const journalChart=mountJournalChart($('equity-chart'));
 mountMarket();
 mountMonitor();
@@ -52,9 +54,9 @@ function resetFilters() {
   for(const id of ['account','symbol','direction'])$(id).value='';refreshOptions();render();
 }
 for (const button of document.querySelectorAll('[data-tab]')) button.addEventListener('click',()=>{
-  const tab = button.dataset.tab; location.hash=tab; document.querySelector('header .demo-badge').textContent=tab==='market'?'MARKET':'MY TRADES';
-  $('journal').hidden = tab !== 'journal'; $('market').hidden = tab !== 'market';
-  $('breadcrumb').textContent = tab === 'journal' ? 'TRADE JOURNAL' : 'MARKET MONITOR';
+  const tab = button.dataset.tab; location.hash=tab; document.querySelector('header .demo-badge').textContent=tab==='settings'?'SETTINGS':tab==='market'?'MARKET':'MY TRADES';
+  for(const id of ['journal','market','settings'])$(id).hidden=tab!==id;
+  $('breadcrumb').textContent = tab==='settings'?'SETTINGS':tab==='journal'?'TRADE JOURNAL':'MARKET MONITOR';
   document.querySelectorAll('[data-tab]').forEach(b=>{ b.classList.toggle('active',b===button); b.setAttribute('aria-current',b===button?'page':'false'); });
 });
 

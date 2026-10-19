@@ -56,6 +56,6 @@ public static class AnalysisChecks
     }
     private sealed class FixtureProvider:IAnalysisProvider
     {
-        public Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token)=>Task.FromResult(new AnalysisResult("Fixture review","Retrospective summary",["Net 95","Fees 5"],["One trade","No market path"],["Record consistent risk"],"Retrospective review only"));
+        public Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null)=>Task.FromResult(new AnalysisResult("Fixture review","Retrospective summary",["Net 95","Fees 5"],["One trade","No market path"],["Record consistent risk"],"Retrospective review only"));
     }
 }

@@ -17,7 +17,7 @@ public static class AnalysisWorkflowChecks
     {
         public TaskCompletionSource<JsonElement> Started {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<AnalysisResult> Result {get;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token)
+        public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null)
         {
             Started.TrySetResult(snapshot);return await Result.Task.WaitAsync(token);
         }

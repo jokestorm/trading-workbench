@@ -8,8 +8,13 @@ public record TradeDecision(string Action,string Reason,decimal? Entry,decimal? 
 public record AnalysisRequest(string Kind,TradeFilter? Filters=null,bool IncludeNotes=false,string? Symbol=null,string Source="bars",int Days=7,AnalysisPosition? Position=null);
 public record AnalysisPreview(string Token,string Kind,DateTimeOffset ExpiresAt,JsonElement Snapshot);
 public record AnalysisResult(string Summary,string Assessment,string[] Evidence,string[] Limitations,string[] NextSteps,string Invalidation,TradeDecision? Decision=null);
-public record AnalysisRun(string Id,string Kind,DateTimeOffset CreatedAt,string Provider,string Model,string PromptVersion,JsonElement Snapshot,AnalysisResult Result);
-public interface IAnalysisProvider { Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token); }
+public record AnalysisRun(string Id,string Kind,DateTimeOffset CreatedAt,string Provider,string Model,string PromptVersion,JsonElement Snapshot,AnalysisResult Result)
+{
+    public string? PromptText {get;init;}
+    public string? PromptSource {get;init;}
+    public string? PromptBaseVersion {get;init;}
+}
+public interface IAnalysisProvider { Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null); }
 public record CodexStatus(bool Installed,bool SubscriptionLogin,string Message);
 
 public sealed class CodexAnalysisProvider(string? executable=null,string? home=null,Func<ProcessStartInfo,string?,CancellationToken,Task<(int Exit,string Output)>>? runProcess=null,ILogger<CodexAnalysisProvider>? logger=null):IAnalysisProvider
@@ -53,14 +58,14 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
         catch(Exception error) when(error is FormatException or OperationCanceledException){return new(executable is not null||FindExecutable() is not null,false,"Codex is unavailable. Install the latest Trading Workbench app update, then check again.");}
     }
     public async Task Logout(){using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));var result=await (runProcess??RunProcess)(Start("logout"),null,timeout.Token);if(result.Exit!=0)throw new FormatException("Could not sign out of Codex. Try again.");}
-    public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token)
+    public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null)
     {
         using var lease=EnterOperation();
         var schemaPath=Path.Combine(directory,"schema.json");var resultPath=Path.Combine(directory,"result.json");
         var schema=new JsonObject{["type"]="object",["additionalProperties"]=false};var properties=new JsonObject();
         foreach(var key in new[]{"summary","assessment","invalidation"})properties[key]=new JsonObject{["type"]="string"};
         foreach(var key in new[]{"evidence","limitations","nextSteps"})properties[key]=new JsonObject{["type"]="array",["items"]=new JsonObject{["type"]="string"}};
-        var policy=AnalysisPrompts.For(snapshot);
+        var policy=prompt??AnalysisPrompts.For(snapshot);
         var market=snapshot.TryGetProperty("position",out _);
         properties["decision"]=market?JsonNode.Parse("""{"type":"object","additionalProperties":false,"properties":{"trend":{"type":"string","enum":["UP","DOWN","SIDEWAYS","UNCLEAR"]},"action":{"type":"string","enum":["BUY","SELL_SHORT","SELL_CLOSE","BUY_COVER","HOLD","WAIT"]},"reason":{"type":"string","maxLength":180},"entry":{"type":["number","null"]},"stop":{"type":["number","null"]},"target":{"type":["number","null"]}},"required":["trend","action","reason","entry","stop","target"]}"""):new JsonObject{["type"]="null"};
         schema["properties"]=properties;schema["required"]=new JsonArray(properties.Select(p=>(JsonNode?)JsonValue.Create(p.Key)).ToArray());
@@ -97,8 +102,9 @@ public sealed class AnalysisService
 {
     private readonly TradeStore trades;private readonly IAnalysisProvider provider;private readonly string directory;
     private readonly Dictionary<string,AnalysisPreview> previews=new();private readonly SemaphoreSlim gate=new(1,1);
-    private readonly MarketStore? market;
-    public AnalysisService(TradeStore trades,IAnalysisProvider provider,string directory,MarketStore? market=null){this.trades=trades;this.provider=provider;this.directory=directory;this.market=market;Directory.CreateDirectory(directory);}
+    private readonly MarketStore? market;private readonly PromptSettings? prompts;
+    public AnalysisService(TradeStore trades,IAnalysisProvider provider,string directory,MarketStore? market=null,PromptSettings? prompts=null){this.prompts=prompts;this.trades=trades;this.provider=provider;this.directory=directory;this.market=market;Directory.CreateDirectory(directory);}
+    internal PromptDefinition FreezePrompt(string kind)=>prompts?.Resolve(kind)??AnalysisPrompts.Default(kind);
     public AnalysisPreview Preview(AnalysisRequest request,MarketQuote? refreshedQuote=null)
     {
         object snapshot;
@@ -127,16 +133,16 @@ public sealed class AnalysisService
     {
         var run=await Execute(token,cancellation);cancellation.ThrowIfCancellationRequested();Save(run);return run;
     }
-    internal async Task<AnalysisRun> Execute(string token,CancellationToken cancellation,string? runId=null)
+    internal async Task<AnalysisRun> Execute(string token,CancellationToken cancellation,string? runId=null,PromptDefinition? definition=null)
     {
         if(!await gate.WaitAsync(0,cancellation))throw new FormatException("An analysis is already running. Wait for it to finish.");
         try{
             AnalysisPreview preview;lock(previews){if(string.IsNullOrEmpty(token)||!previews.TryGetValue(token,out preview!)||preview.ExpiresAt<DateTimeOffset.UtcNow)throw new FormatException("Preview expired. Preview the data again.");previews.Remove(token);}
             var id=runId??Guid.NewGuid().ToString("N");var runDirectory=Path.Combine(directory,"runs",id);Directory.CreateDirectory(runDirectory);
-            using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);var policy=AnalysisPrompts.For(preview.Snapshot);timeout.CancelAfter(policy.TimeLimit);
-            AnalysisResult result;try{result=await provider.Analyze(preview.Snapshot,runDirectory,timeout.Token);}catch(OperationCanceledException){throw new FormatException($"Analysis was canceled or reached its {policy.TimeLimit.TotalSeconds:0}-second limit. Start a new analysis to retry.");}
+            using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);definition??=FreezePrompt(preview.Kind);var policy=AnalysisPrompts.For(preview.Snapshot,definition);timeout.CancelAfter(policy.TimeLimit);
+            AnalysisResult result;try{result=await provider.Analyze(preview.Snapshot,runDirectory,timeout.Token,policy);}catch(OperationCanceledException){throw new FormatException($"Analysis was canceled or reached its {policy.TimeLimit.TotalSeconds:0}-second limit. Start a new analysis to retry.");}
             if(preview.Kind=="saved-market")result=DecisionRules.Apply(result,preview.Snapshot,DateTimeOffset.UtcNow);
-            var run=new AnalysisRun(id,preview.Kind,DateTimeOffset.UtcNow,"Codex CLI · ChatGPT",provider is CodexAnalysisProvider codex?codex.Model:"Fixture provider",policy.Version,preview.Snapshot,result);
+            var run=new AnalysisRun(id,preview.Kind,DateTimeOffset.UtcNow,"Codex CLI · ChatGPT",provider is CodexAnalysisProvider codex?codex.Model:"Fixture provider",policy.Version,preview.Snapshot,result){PromptText=policy.Text,PromptSource=definition.Source,PromptBaseVersion=definition.BasedOnVersion??definition.Version};
             return run;
         }finally{gate.Release();}
     }

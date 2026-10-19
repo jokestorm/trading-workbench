@@ -61,17 +61,18 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
             // Journal filters and optional notes are resolved before returning
             // admission, so later edits cannot change this run's population.
             var preview=request.Kind=="journal"?analysis.Preview(request):null;
+            var prompt=analysis.FreezePrompt(request.Kind);
             var now=DateTimeOffset.UtcNow;
             var job=new AnalysisJob(Guid.NewGuid().ToString("N"),request.Kind,request.Kind=="saved-market"?request.Symbol:null,"preparing","Preparing data…",now,now);
             Set(job);cancellation?.Dispose();cancellation=new CancellationTokenSource();
-            running=Task.Run(()=>Run(job,request,preview,cancellation.Token));return job;
+            running=Task.Run(()=>Run(job,request,preview,prompt,cancellation.Token));return job;
         }
     }
     private void Progress(string state,string message)
     {
         lock(sync){cancellation!.Token.ThrowIfCancellationRequested();Set(current! with{State=state,Message=message,UpdatedAt=DateTimeOffset.UtcNow});}
     }
-    private async Task Run(AnalysisJob job,AnalysisRequest request,AnalysisPreview? preview,CancellationToken token)
+    private async Task Run(AnalysisJob job,AnalysisRequest request,AnalysisPreview? preview,PromptDefinition prompt,CancellationToken token)
     {
         using var heartbeatStop=new CancellationTokenSource();
         var heartbeat=Heartbeat(heartbeatStop.Token);
@@ -90,7 +91,7 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
                 preview=analysis.Preview(request,quote);
             }
             Progress("analyzing","Analyzing… You can leave this page and return later.");
-            var result=await analysis.Execute(preview!.Token,token,job.Id);
+            var result=await analysis.Execute(preview!.Token,token,job.Id,prompt);
             lock(sync)
             {
                 // Cancellation and committing the result have one ordering:

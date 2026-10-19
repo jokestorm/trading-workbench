@@ -119,6 +119,24 @@ Price refresh has a 60-second limit. Codex execution is limited to 90 seconds
 for market analysis and 240 seconds for journal review, separately from refresh.
 If a run fails, share the `Analysis` lines for its run ID to locate the delay.
 
+## Personal analysis prompts
+
+Open **Settings → Prompts** in Trading Workbench to view or edit market analysis
+and journal review separately. **Save custom** activates your text; **Reset edits**
+discards only unsaved edits. **Use latest default** removes your customization and
+follows the app's default again. The app attaches the selected data automatically.
+
+Custom prompts persist under `/data/workbench/prompt-settings` through restarts,
+updates, and app backups. New releases replace the app defaults but leave custom
+text unchanged. A **New default available** banner offers a comparison. Copy the
+default to your editor, or manually incorporate selected changes and mark the
+default reviewed before saving. Changes affect the next analysis, not active runs.
+
+Each new analysis saves its exact prompt, including its frozen input data, in
+private analysis history. Expand **Prompt used** to inspect it. Older results
+retain their version but may not have exact text. Data checks, allowed actions,
+structured output, research access, and time limits remain app controlled.
+
 ## Updating
 
 Increment `version` in `config.yaml`, update CHANGELOG.md, and publish a matching

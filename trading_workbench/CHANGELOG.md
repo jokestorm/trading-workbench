@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.9
+
+- Add Settings → Prompts with market and journal editors, persistent custom
+  prompts, latest-default comparisons, reset edits, and explicit adoption of
+  updated defaults. Preserve custom text across app updates and flag new defaults.
+- Freeze the selected prompt when analysis starts and save its exact text and
+  version with the result. Show Prompt used in analysis history; keep older
+  history readable without inventing its original prompt.
+
 ## 0.1.8
 
 - Show gross trading P/L before costs in the main journal box and fees and

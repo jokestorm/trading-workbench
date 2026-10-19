@@ -2,7 +2,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
 if(args.Contains("--workflow-test")){await AnalysisWorkflowChecks.Run();return;}
 if(args.Contains("--settlement-test")){CashSettlementChecks.Run();return;}
 if(args.Contains("--workflow-crash")){await AnalysisWorkflowChecks.Crash(args[Array.IndexOf(args,"--workflow-crash")+1]);return;}
@@ -42,7 +42,9 @@ var schwab=new SchwabConnection(secretsDirectory,app.Services.GetRequiredService
 var aiProvider=new CodexAnalysisProvider(builder.Configuration["CodexExecutable"],builder.Configuration["CodexHome"],logger:app.Services.GetRequiredService<ILogger<CodexAnalysisProvider>>());
 await using var codexLogin=new CodexLoginService(()=>new CodexLoginSession(aiProvider),aiProvider.Status,aiProvider.Logout,aiProvider.EnterOperation);
 var market=new MarketStore(app.Configuration["DataDirectory"]??Path.Combine(root,"data"));
-var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market);
+var promptSettings=new PromptSettings(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"prompt-settings"));
+PromptSettings.Map(app,promptSettings);
+var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market,promptSettings);
 await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis","jobs"),(request,token)=>MarketRoutes.RefreshForAnalysis(market,schwab,request,token),app.Services.GetRequiredService<ILogger<AnalysisWorkflow>>());
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
 app.Use(async (context, next) =>

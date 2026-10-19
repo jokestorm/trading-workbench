@@ -3,6 +3,7 @@ using System.Text.Json;
 namespace TradingWorkbench;
 
 public record AnalysisPrompt(string Text,string Version,bool AllowResearch,TimeSpan TimeLimit);
+public record PromptDefinition(string Kind,string Text,string Version,string Source="default",string? BasedOnVersion=null);
 
 public static class AnalysisPrompts
 {
@@ -25,10 +26,17 @@ public static class AnalysisPrompts
         Keep summary and assessment concise. Evidence and limitations should each contain 2-5 short items; nextSteps 1-3 practical improvements to recordkeeping, risk consistency, or review. Invalidation explains the limits of applying a retrospective finding beyond this selected sample. No order execution.
         """;
 
-    public static AnalysisPrompt For(JsonElement snapshot)
+    public static PromptDefinition Default(string kind)=>kind switch
+    {
+        "journal"=>new("journal",Journal,"journal-review-v2"),
+        "market" or "saved-market" or "sample-market"=>new("market",Market,"market-signal-v6"),
+        _=>throw new FormatException("Choose the market or journal prompt.")
+    };
+    public static AnalysisPrompt For(JsonElement snapshot,PromptDefinition? definition=null)
     {
         var journal=snapshot.TryGetProperty("kind",out var kind)&&kind.GetString()=="journal";
         var research=!journal&&snapshot.TryGetProperty("position",out _);
-        return new((journal?Journal:Market)+"\nSNAPSHOT:\n"+snapshot.GetRawText(),journal?"journal-review-v2":"market-signal-v6",research,TimeSpan.FromSeconds(journal?240:90));
+        definition??=Default(journal?"journal":"market");
+        return new(definition.Text+"\nSNAPSHOT:\n"+snapshot.GetRawText(),definition.Version,research,TimeSpan.FromSeconds(journal?240:90));
     }
 }
