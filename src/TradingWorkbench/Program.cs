@@ -2,8 +2,9 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { await MarketBriefChecks.Run(); await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { await SignalContinuityChecks.Run(); await MarketBriefChecks.Run(); await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
 if(args.Contains("--workflow-test")){await AnalysisWorkflowChecks.Run();return;}
+if(args.Contains("--signal-continuity-test")){await SignalContinuityChecks.Run();return;}
 if(args.Contains("--settlement-test")){CashSettlementChecks.Run();return;}
 if(args.Contains("--workflow-crash")){await AnalysisWorkflowChecks.Crash(args[Array.IndexOf(args,"--workflow-crash")+1]);return;}
 if(args.Contains("--codex-probe")){await CodexLoginChecks.Probe();return;}

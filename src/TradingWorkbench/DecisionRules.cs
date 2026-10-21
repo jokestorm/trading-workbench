@@ -16,6 +16,7 @@ public static class DecisionRules
             if(d.Entry is null or <=0||d.Stop is null or <=0||d.Target is null or <=0||!(d.Action=="BUY"?d.Stop<d.Entry&&d.Entry<d.Target:d.Target<d.Entry&&d.Entry<d.Stop))blocked="The proposed entry, stop and target do not define a valid setup.";
             else if(snapshot.TryGetProperty("tickSize",out var tickValue)){var tick=tickValue.GetDecimal();if(new[]{d.Entry.Value,d.Stop.Value,d.Target.Value}.Any(v=>v%tick!=0))blocked="Proposed price levels do not match this instrument's tick size.";}
         }
-        return blocked is null?result:result with{Summary="WAIT",Assessment=blocked,NextSteps=[state=="UNKNOWN"?"Set your current position, then analyze again.":"Update the market data and analyze again."],Invalidation="This result cannot support a current buy/sell action.",Decision=new("WAIT",blocked,null,null,null,true)};
+        var guardCode=blocked is null?null:state=="UNKNOWN"?"position-unknown":blocked.StartsWith("Quote samples")?"history-required":blocked.StartsWith("Market data")?"bars-stale":blocked.StartsWith("A fresh")?"quote-unverified-or-stale":blocked.StartsWith("The proposed action")?"position-mismatch":blocked.StartsWith("The proposed entry")?"invalid-levels":"off-tick-levels";
+        return blocked is null?result:result with{Summary="WAIT",Assessment=blocked,NextSteps=[state=="UNKNOWN"?"Set your current position, then analyze again.":"Update the market data and analyze again."],Invalidation="This result cannot support a current buy/sell action.",Decision=new("WAIT",blocked,null,null,null,true,GuardCode:guardCode)};
     }
 }

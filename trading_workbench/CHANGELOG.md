@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.12
+
+- Carry the previous signal for the same contract, chart source and unchanged
+  manual position into repeat analysis (up to three hours). Market default
+  prompt v8 evaluates the original trigger and expiry before proposing a
+  replacement, and does not silently move levels or restart the trigger clock.
+- Distinguish model WAIT calls from app data/position blocks in the signal
+  card and Home Assistant logs, with safe guard categories. Preserve existing
+  freshness, position and price-level checks; custom prompts stay unchanged.
+
 ## 0.1.11
 
 - Add a living broad-market and commodities brief above the market chart.

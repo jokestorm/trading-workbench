@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 namespace TradingWorkbench;
 public record AnalysisPosition(string State="UNKNOWN",int? Quantity=null,decimal? AverageEntry=null);
-public record TradeDecision(string Action,string Reason,decimal? Entry,decimal? Stop,decimal? Target,bool Guarded=false,string? Trend=null);
+public record TradeDecision(string Action,string Reason,decimal? Entry,decimal? Stop,decimal? Target,bool Guarded=false,string? Trend=null,string? GuardCode=null);
 public record AnalysisRequest(string Kind,TradeFilter? Filters=null,bool IncludeNotes=false,string? Symbol=null,string Source="bars",int Days=7,AnalysisPosition? Position=null);
 public record AnalysisPreview(string Token,string Kind,DateTimeOffset ExpiresAt,JsonElement Snapshot);
 public record AnalysisResult(string Summary,string Assessment,string[] Evidence,string[] Limitations,string[] NextSteps,string Invalidation,TradeDecision? Decision=null);
@@ -136,11 +136,24 @@ public sealed class AnalysisService
             data["pointValue"]=instrument?.PointValue;data["tickSize"]=root.StartsWith("MES")?.25m:root.StartsWith("MGC")?.1m:(root.StartsWith("MCL")||root.StartsWith("CL"))?.01m:root.StartsWith("MET")?.5m:1m;
             data["timeframeDirections"]=JsonSerializer.SerializeToNode(timeframes?.Get(symbol),CodexAnalysisProvider.Json);
             data["latestQuote"]=JsonSerializer.SerializeToNode(refreshedQuote??market.Quotes(symbol).LastOrDefault(),CodexAnalysisProvider.Json);
+            data["previousSignal"]=JsonSerializer.SerializeToNode(PreviousSignal(symbol,position,request.Source),CodexAnalysisProvider.Json);
             snapshot=data;
         }else throw new FormatException("Choose journal, saved-market or sample-market analysis.");
         var preview=new AnalysisPreview(Guid.NewGuid().ToString("N"),request.Kind,DateTimeOffset.UtcNow.AddMinutes(20),JsonSerializer.SerializeToElement(snapshot,CodexAnalysisProvider.Json));
         lock(previews){foreach(var expired in previews.Where(p=>p.Value.ExpiresAt<DateTimeOffset.UtcNow).Select(p=>p.Key).ToArray())previews.Remove(expired);if(previews.Count>=10)previews.Remove(previews.Keys.First());previews[preview.Token]=preview;}return preview;
     }
+    private object? PreviousSignal(string symbol,AnalysisPosition position,string source)
+    {
+        var now=DateTimeOffset.UtcNow;
+        var previous=History().FirstOrDefault(run=>run.Kind=="saved-market"&&run.Snapshot.TryGetProperty("symbol",out var savedSymbol)&&savedSymbol.GetString()==symbol);
+        if(previous is null||previous.CreatedAt>now||now-previous.CreatedAt>TimeSpan.FromHours(3)||previous.Result.Decision is not {} decision)return null;
+        if(previous.Snapshot.TryGetProperty("bars",out _)!=(source=="bars")||!previous.Snapshot.TryGetProperty("position",out var savedPosition))return null;
+        var prior=savedPosition.Deserialize<AnalysisPosition>(CodexAnalysisProvider.Json);
+        if(prior is null||PositionKey(prior)!=PositionKey(position))return null;
+        return new{previous.Id,previous.CreatedAt,ageSeconds=(now-previous.CreatedAt).TotalSeconds,decision,previous.Result.Invalidation,
+            provenance="Previous AI suggestion, not a fill or current market fact. Re-evaluate its condition and expiry against the fresh observations."};
+    }
+    private static AnalysisPosition PositionKey(AnalysisPosition position)=>position.State is "FLAT" or "UNKNOWN"?new(position.State):position;
     public static object SampleMarket()
     {
         var prices=new decimal[]{100,100.5m,100.25m,101,101.5m,101.25m,101.75m,102,101.5m,101.25m,102,102.5m,102.25m,102.75m,103,102.5m,102.25m,102.75m,103.25m,103};

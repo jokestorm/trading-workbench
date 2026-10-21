@@ -14,4 +14,9 @@ test('an exit signal refers to the position used and missing old trend values re
 test('guarded WAIT suppresses entry levels and escapes model text',()=>{
  const html=renderMarketSignal({...run,result:{...run.result,decision:{...run.result.decision,action:'WAIT',guarded:true,trend:null,reason:'<img src=x onerror=alert(1)>'}}});
  assert.match(html,/Trend: UNCLEAR/);assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|decision-levels|\$5.00/);
+ assert.match(html,/Blocked by an app data or position check/);
+});
+test('model NEXT calls remain distinct from app-blocked WAIT results',()=>{
+ const html=renderMarketSignal({...run,result:{...run.result,decision:{action:'WAIT',reason:'NEXT: Close below 100 within five minutes.',trend:'DOWN',guarded:false}}});
+ assert.match(html,/NEXT: Close below 100/);assert.doesNotMatch(html,/Blocked by an app/);
 });

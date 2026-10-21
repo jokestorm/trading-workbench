@@ -92,6 +92,7 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
             }
             Progress("analyzing","Analyzing… You can leave this page and return later.");
             var result=await analysis.Execute(preview!.Token,token,job.Id,prompt);
+            if(result.Result.Decision is {} decision)logger.LogInformation("Analysis {RunId} decision={Action} origin={Origin} guardCode={GuardCode}",job.Id,decision.Action,decision.Guarded?"app-check":"model",decision.GuardCode??"none");
             lock(sync)
             {
                 // Cancellation and committing the result have one ordering:
