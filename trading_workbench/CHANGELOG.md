@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.11
+
+- Add a living broad-market and commodities brief above the market chart.
+  Research hourly on weekdays from 8 AM through 3 PM Eastern, independently
+  of open pages. Preserve relevant points, update meaningful developments,
+  and track last checked separately from last changed.
+- Persist the brief and changed revisions across restarts. Retain the previous
+  text on failed checks, skip missed-hour backlogs, and defer or interrupt
+  background research for manual analysis using the shared ChatGPT connection.
+
 ## 0.1.10
 
 - Add direction estimates for 1m, 5m, 15m, 30m, 1h, and daily candles, including

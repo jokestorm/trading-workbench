@@ -2,7 +2,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { await MarketBriefChecks.Run(); await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
 if(args.Contains("--workflow-test")){await AnalysisWorkflowChecks.Run();return;}
 if(args.Contains("--settlement-test")){CashSettlementChecks.Run();return;}
 if(args.Contains("--workflow-crash")){await AnalysisWorkflowChecks.Crash(args[Array.IndexOf(args,"--workflow-crash")+1]);return;}
@@ -49,6 +49,10 @@ PromptSettings.Map(app,promptSettings);
 var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market,promptSettings,timeframes);
 await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis","jobs"),(request,token)=>MarketRoutes.RefreshForAnalysis(market,schwab,request,token),app.Services.GetRequiredService<ILogger<AnalysisWorkflow>>());
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
+var marketBrief=new MarketBriefService(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"market-brief"),
+    (previous,now,directory,token)=>MarketBriefService.Research(aiProvider,previous,now,directory,token),
+    ()=>analysisWorkflow.Current() is {Active:true},app.Services.GetRequiredService<ILogger<MarketBriefService>>());
+MarketBriefService.Map(app,marketBrief);
 app.Use(async (context, next) =>
 {
     if(context.Request.Path.StartsWithSegments("/api/schwab")||context.Request.Path.StartsWithSegments("/api/ai"))context.Response.Headers.CacheControl="no-store";
@@ -114,4 +118,6 @@ app.MapPost("/api/imports/commit",(CommitRequest request)=>
 var files = new PhysicalFileProvider(Path.Combine(root, "web"));
 app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
 app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
-app.Run();
+using var briefStop=CancellationTokenSource.CreateLinkedTokenSource(app.Lifetime.ApplicationStopping);
+var briefTask=marketBrief.Run(briefStop.Token);
+try{await app.RunAsync();}finally{briefStop.Cancel();await briefTask;}

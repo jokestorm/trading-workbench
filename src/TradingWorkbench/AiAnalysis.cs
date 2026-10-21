@@ -21,6 +21,9 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
 {
     private readonly ILogger<CodexAnalysisProvider> log=logger??Microsoft.Extensions.Logging.Abstractions.NullLogger<CodexAnalysisProvider>.Instance;
     private readonly SemaphoreSlim operation=new(1,1);
+    private readonly object prioritySync=new();
+    private CancellationTokenSource? briefCancellation;
+    private int manualWaiters;
     public IDisposable EnterOperation()
     {
         if(!operation.Wait(0))throw new FormatException("AI is busy signing in or analyzing. Wait for it to finish.");
@@ -60,7 +63,21 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
     public async Task Logout(){using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));var result=await (runProcess??RunProcess)(Start("logout"),null,timeout.Token);if(result.Exit!=0)throw new FormatException("Could not sign out of Codex. Try again.");}
     public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null)
     {
-        using var lease=EnterOperation();
+        lock(prioritySync){manualWaiters++;briefCancellation?.Cancel();}
+        try{await operation.WaitAsync(token);}finally{lock(prioritySync)manualWaiters--;}
+        using var lease=new OperationLease(operation);
+        return await AnalyzeCore(snapshot,directory,token,prompt);
+    }
+    internal async Task<AnalysisResult> AnalyzeBrief(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt prompt)
+    {
+        using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(token);
+        lock(prioritySync){if(manualWaiters>0||!operation.Wait(0))throw new BriefDeferredException();briefCancellation=cancellation;}
+        using var lease=new OperationLease(operation);
+        try{return await AnalyzeCore(snapshot,directory,cancellation.Token,prompt);}
+        finally{lock(prioritySync)briefCancellation=null;}
+    }
+    private async Task<AnalysisResult> AnalyzeCore(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt)
+    {
         var schemaPath=Path.Combine(directory,"schema.json");var resultPath=Path.Combine(directory,"result.json");
         var schema=new JsonObject{["type"]="object",["additionalProperties"]=false};var properties=new JsonObject();
         foreach(var key in new[]{"summary","assessment","invalidation"})properties[key]=new JsonObject{["type"]="string"};
