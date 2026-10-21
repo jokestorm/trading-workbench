@@ -124,23 +124,31 @@ public sealed class SchwabConnection
             catch(Exception error) when(error is JsonException or InvalidOperationException or ArgumentOutOfRangeException){throw new FormatException("Schwab returned an unexpected quote response.");}
         }finally{gate.Release();}
     }
-    public async Task<PriceBar[]> PriceHistory(string symbol,CancellationToken token=default)
+    public async Task<PriceBar[]> PriceHistory(string symbol,CancellationToken token=default,bool daily=false)
     {
         symbol=MarketStore.Symbol(symbol);await gate.WaitAsync(token);try{
             if(vault?.Tokens is null)throw new FormatException("Authorize Schwab first.");
             if(vault.Tokens.AccessExpiresAt<=DateTimeOffset.UtcNow.AddSeconds(60))Persist(vault with{Tokens=await Exchange(new(){{"grant_type","refresh_token"},{"refresh_token",vault.Tokens.RefreshToken}},vault.Tokens,token)});
             var now=DateTimeOffset.UtcNow;
-            var url=QueryHelpers.AddQueryString("https://api.schwabapi.com/marketdata/v1/pricehistory",new Dictionary<string,string?>{{"symbol",symbol},{"periodType","day"},{"frequencyType","minute"},{"frequency","1"},{"startDate",now.AddDays(-7).ToUnixTimeMilliseconds().ToString()},{"endDate",now.ToUnixTimeMilliseconds().ToString()},{"needExtendedHoursData","true"}});
+            var url=QueryHelpers.AddQueryString("https://api.schwabapi.com/marketdata/v1/pricehistory",new Dictionary<string,string?>{{"symbol",symbol},{"periodType",daily?"year":"day"},{"frequencyType",daily?"daily":"minute"},{"frequency","1"},{"startDate",(daily?now.AddYears(-1):now.AddDays(-7)).ToUnixTimeMilliseconds().ToString()},{"endDate",now.ToUnixTimeMilliseconds().ToString()},{"needExtendedHoursData","true"}});
             using var request=new HttpRequestMessage(HttpMethod.Get,url);request.Headers.Authorization=new("Bearer",vault.Tokens!.AccessToken);using var response=await http.SendAsync(request,token);
             if(response.StatusCode==HttpStatusCode.Unauthorized){Persist(vault with{Tokens=null});throw new FormatException("Schwab authorization needs renewal. Authorize again.");}
             if(!response.IsSuccessStatusCode)throw new FormatException($"Schwab history request failed (HTTP {(int)response.StatusCode}). Historical data may be unsupported for this symbol; use quote snapshots instead.");
-            try {using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));return ParseHistory(json.RootElement,symbol,now);}catch(Exception e) when(e is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentOutOfRangeException){throw new FormatException("Unexpected historical data from Schwab. No bars saved.");}
+            try {using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));return daily?ParseDailyHistory(json.RootElement,symbol,now):ParseHistory(json.RootElement,symbol,now);}catch(Exception e) when(e is JsonException or InvalidOperationException or KeyNotFoundException or ArgumentOutOfRangeException){throw new FormatException("Unexpected historical data from Schwab. No bars saved.");}
         }finally{gate.Release();}
     }
     public static PriceBar[] ParseHistory(JsonElement root,string symbol,DateTimeOffset fetched)
     {
         if(!root.TryGetProperty("candles",out var candles)||candles.ValueKind!=JsonValueKind.Array)throw new FormatException("Schwab returned no candle array for this symbol.");
         return candles.EnumerateArray().Select(c=>new PriceBar(symbol,DateTimeOffset.FromUnixTimeMilliseconds(c.GetProperty("datetime").GetInt64()),c.GetProperty("open").GetDecimal(),c.GetProperty("high").GetDecimal(),c.GetProperty("low").GetDecimal(),c.GetProperty("close").GetDecimal(),c.GetProperty("volume").GetInt64())).Where(b=>b.Time.AddMinutes(1)<=fetched).OrderBy(b=>b.Time).ToArray();
+    }
+    public static PriceBar[] ParseDailyHistory(JsonElement root,string symbol,DateTimeOffset fetched)
+    {
+        var eastern=TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+        var today=TimeZoneInfo.ConvertTime(fetched,eastern).Date;
+        var bars=ParseHistory(root,symbol,fetched).Where(b=>TimeZoneInfo.ConvertTime(b.Time,eastern).Date<today).ToArray();
+        if(bars.Any(b=>b.High<Math.Max(b.Open,b.Close)||b.Low>Math.Min(b.Open,b.Close)||b.High<b.Low||b.Volume<0))throw new FormatException("Invalid daily candles returned by Schwab.");
+        return bars;
     }
     public static MarketQuote ParseQuote(JsonElement root,string symbol,DateTimeOffset fetched)
     {

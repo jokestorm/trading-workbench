@@ -1,13 +1,13 @@
-import {mountPromptSettings} from './prompt-settings.js?v=ha-0.1.9';
-import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.9';
+import {mountPromptSettings} from './prompt-settings.js?v=ha-0.1.10';
+import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.10';
 import { fetchApp, appUrl } from './http.js';
-import { mountJournalChart } from './journal-chart.js?v=ha-0.1.9';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.9';
-import { mountImport } from './import.js?v=ha-0.1.9';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.9';
-import { mountMarket } from './market.js?v=ha-0.1.9';
-import { mountAI } from './ai.js?v=ha-0.1.9';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.9';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.10';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.10';
+import { mountImport } from './import.js?v=ha-0.1.10';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.10';
+import { mountMarket } from './market.js?v=ha-0.1.10';
+import { mountAI } from './ai.js?v=ha-0.1.10';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.10';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;

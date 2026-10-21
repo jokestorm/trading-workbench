@@ -26,6 +26,7 @@ public static class SchwabChecks
         rejected=false;try{await reopened.SaveSettings(new("fixture-app-key","","https://example.com/callback"));}catch(FormatException){rejected=true;}Check(rejected,"callback settings only accept HTTPS loopback URLs");
         await reopened.SaveSettings(new("fixture-app-key","","https://127.0.0.1:8182"));Check(JsonSerializer.SerializeToElement(await reopened.Status()).GetProperty("connected").GetBoolean(),"unchanged settings preserve authorization with a blank secret field");
         await reopened.SaveSettings(new("","","https://127.0.0.1:8182"));Check(JsonSerializer.SerializeToElement(await reopened.Status()).GetProperty("connected").GetBoolean(),"blank app key and secret keep existing encrypted settings");
+        var daily=await reopened.PriceHistory("AAPL",daily:true);Check(daily.Length==1&&transport.DailyHistoryRequested,"daily history requests use daily frequency with a year window and authenticated transport");
         foreach(var operation in new Func<CancellationToken,Task>[] { token=>reopened.Quote("AAPL",token),token=>reopened.PriceHistory("/MESZ26",token) })
         {
             transport.Block=true;transport.Entered=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -39,13 +40,14 @@ public static class SchwabChecks
             Check(canceledWait&&canceledHttp,"canceling market work stops queued and active HTTP requests and releases the Schwab lock");
         }
         await reopened.Disconnect();Check(!JsonSerializer.SerializeToElement(await reopened.Status()).GetProperty("connected").GetBoolean(),"disconnect removes local tokens while keeping app settings");
-        rejected=false;try{await reopened.Quote("AAPL");}catch(FormatException){rejected=true;}Check(rejected&&transport.Calls==3,"disconnected quote requests never reach Schwab");
+        rejected=false;try{await reopened.Quote("AAPL");}catch(FormatException){rejected=true;}Check(rejected&&transport.Calls==4,"disconnected quote requests never reach Schwab");
         Console.WriteLine("All Schwab checks passed using simulated responses; live API access is unverified.");
     }
     private sealed class SimulatedSchwab:HttpMessageHandler
     {
         public int Calls {get;private set;}
         public bool Block {get;set;}
+        public bool DailyHistoryRequested {get;private set;}
         public TaskCompletionSource Entered {get;set;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
         {
@@ -53,6 +55,11 @@ public static class SchwabChecks
             Calls++;string json;
             if(Calls==1){var body=await request.Content!.ReadAsStringAsync(token);var form=QueryHelpers.ParseQuery(body);if(form["code"]!="fixture-code+encoded"||request.Headers.Authorization?.Scheme!="Basic")throw new Exception("Incorrect token request.");json="""{"access_token":"fixture-access","refresh_token":"fixture-refresh","expires_in":1} """;}
             else if(Calls==2){var form=QueryHelpers.ParseQuery(await request.Content!.ReadAsStringAsync(token));if(form["grant_type"]!="refresh_token"||form["refresh_token"]!="fixture-refresh")throw new Exception("Incorrect refresh request.");json="""{"access_token":"fixture-access-new","expires_in":1800} """;}
+            else if(request.RequestUri!.AbsolutePath=="/marketdata/v1/pricehistory")
+            {
+                var query=QueryHelpers.ParseQuery(request.RequestUri.Query);if(query["frequencyType"]!="daily"||query["periodType"]!="year"||query["frequency"]!="1"||request.Headers.Authorization?.Parameter!="fixture-access-new")throw new Exception("Incorrect daily request.");
+                DailyHistoryRequested=true;json=JsonSerializer.Serialize(new{candles=new[]{new{datetime=DateTimeOffset.UtcNow.AddDays(-2).ToUnixTimeMilliseconds(),open=100,high=102,low=99,close=101,volume=100}}});
+            }
             else {if(request.RequestUri!.AbsolutePath!="/marketdata/v1/quotes"||request.Headers.Authorization?.Parameter!="fixture-access-new")throw new Exception("Incorrect quote request.");json="""{"AAPL":{"assetMainType":"EQUITY","realtime":false,"quote":{"lastPrice":225.12,"bidPrice":225.1,"askPrice":225.15,"netChange":1.2,"netPercentChange":0.54,"quoteTime":1791302400000}}} """;}
             return new(HttpStatusCode.OK){Content=new StringContent(json)};
         }

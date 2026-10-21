@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.10
+
+- Add direction estimates for 1m, 5m, 15m, 30m, 1h, and daily candles, including
+  EMA/RSI/MACD votes, timestamps, and history status. Aggregate only complete
+  intraday candles; cache broker daily history separately and leave unsupported
+  or insufficient-history rows unavailable. Include directions in AI snapshots.
+- Add selected-instrument EMA 9/21 overlays, optional Bollinger Bands, and a
+  technical panel with SMA 20/50, RSI 14, MACD 12/26/9, ATR 14, relative volume,
+  and prior-20-bar support/resistance. Show observed crossovers and breakouts.
+- Calculate indicators from up to 180 consecutive closed minute bars; reset
+  after gaps and show unavailable warm-ups. Mark stale/unverified readings as
+  historical and include the same readings in AI snapshots. Market default
+  prompt v7 uses supplied readings; saved custom prompts remain unchanged.
+
 ## 0.1.9
 
 - Add Settings → Prompts with market and journal editors, persistent custom

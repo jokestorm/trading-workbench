@@ -102,8 +102,8 @@ public sealed class AnalysisService
 {
     private readonly TradeStore trades;private readonly IAnalysisProvider provider;private readonly string directory;
     private readonly Dictionary<string,AnalysisPreview> previews=new();private readonly SemaphoreSlim gate=new(1,1);
-    private readonly MarketStore? market;private readonly PromptSettings? prompts;
-    public AnalysisService(TradeStore trades,IAnalysisProvider provider,string directory,MarketStore? market=null,PromptSettings? prompts=null){this.prompts=prompts;this.trades=trades;this.provider=provider;this.directory=directory;this.market=market;Directory.CreateDirectory(directory);}
+    private readonly MarketStore? market;private readonly PromptSettings? prompts;private readonly TimeframeService? timeframes;
+    public AnalysisService(TradeStore trades,IAnalysisProvider provider,string directory,MarketStore? market=null,PromptSettings? prompts=null,TimeframeService? timeframes=null){this.timeframes=timeframes;this.prompts=prompts;this.trades=trades;this.provider=provider;this.directory=directory;this.market=market;Directory.CreateDirectory(directory);}
     internal PromptDefinition FreezePrompt(string kind)=>prompts?.Resolve(kind)??AnalysisPrompts.Default(kind);
     public AnalysisPreview Preview(AnalysisRequest request,MarketQuote? refreshedQuote=null)
     {
@@ -117,6 +117,7 @@ public sealed class AnalysisService
             data["position"]=JsonSerializer.SerializeToNode(new{position.State,position.Quantity,position.AverageEntry,source="Manual input for this dated contract; not broker verified",providedAt=DateTimeOffset.UtcNow},CodexAnalysisProvider.Json);
             var symbol=MarketStore.Symbol(request.Symbol);var root=symbol.TrimStart('/');var instrument=InstrumentCatalog.All.FirstOrDefault(i=>root.StartsWith(i.Root,StringComparison.Ordinal));
             data["pointValue"]=instrument?.PointValue;data["tickSize"]=root.StartsWith("MES")?.25m:root.StartsWith("MGC")?.1m:(root.StartsWith("MCL")||root.StartsWith("CL"))?.01m:root.StartsWith("MET")?.5m:1m;
+            data["timeframeDirections"]=JsonSerializer.SerializeToNode(timeframes?.Get(symbol),CodexAnalysisProvider.Json);
             data["latestQuote"]=JsonSerializer.SerializeToNode(refreshedQuote??market.Quotes(symbol).LastOrDefault(),CodexAnalysisProvider.Json);
             snapshot=data;
         }else throw new FormatException("Choose journal, saved-market or sample-market analysis.");
