@@ -21,3 +21,5 @@
 
 #monitor-timeframes{margin:20px 0;padding:14px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}#monitor-timeframes h3{margin:0 0 8px}.timeframe-table{margin-top:12px}.timeframe-table th,.timeframe-table td{padding:12px}.timeframe-method{margin-top:10px}.timeframe-method summary{cursor:pointer;font-size:12px}
 .brief-points{padding-left:1.25rem;line-height:1.5}.brief-points li+li{margin-top:.4rem}.brief-outlook{font-size:1.05rem}.market-brief .connection-content{max-width:950px}
+.broker-position{border:1px solid var(--line);border-radius:6px;padding:12px;margin:12px 0}.broker-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.broker-position p{margin:8px 0}.broker-position select{max-width:100%}.broker-position .broker-use{white-space:normal;height:auto}
+.historical-positions{padding:18px 23px}.historical-positions>summary{cursor:pointer;color:var(--muted)}.historical-positions>p{margin:12px 0}

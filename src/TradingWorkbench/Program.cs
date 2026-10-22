@@ -2,7 +2,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { await SignalContinuityChecks.Run(); await MarketBriefChecks.Run(); await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if (args.Contains("--self-test")) { await BrokerPositionChecks.Run(); await SignalContinuityChecks.Run(); await MarketBriefChecks.Run(); await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
 if(args.Contains("--workflow-test")){await AnalysisWorkflowChecks.Run();return;}
 if(args.Contains("--signal-continuity-test")){await SignalContinuityChecks.Run();return;}
 if(args.Contains("--settlement-test")){CashSettlementChecks.Run();return;}
@@ -43,6 +43,8 @@ var schwab=new SchwabConnection(secretsDirectory,app.Services.GetRequiredService
 var aiProvider=new CodexAnalysisProvider(builder.Configuration["CodexExecutable"],builder.Configuration["CodexHome"],logger:app.Services.GetRequiredService<ILogger<CodexAnalysisProvider>>());
 await using var codexLogin=new CodexLoginService(()=>new CodexLoginSession(aiProvider),aiProvider.Status,aiProvider.Logout,aiProvider.EnterOperation);
 var market=new MarketStore(app.Configuration["DataDirectory"]??Path.Combine(root,"data"));
+var brokerPositions=new BrokerPositionService(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"broker-positions"),schwab.FuturesTransactions);
+BrokerPositionService.Map(app,brokerPositions);
 var timeframes=new TimeframeService(market,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"daily-history"),(symbol,token)=>schwab.PriceHistory(symbol,token,daily:true));
 TimeframeService.Map(app,timeframes);
 var promptSettings=new PromptSettings(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"prompt-settings"));

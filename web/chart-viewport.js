@@ -67,7 +67,10 @@ export function bindChartNavigation(container, {getState, onWindow, onHover, onL
     if (!drag || drag.id !== event.pointerId) return;
     const position = location(event), start = drag.start, {bounds} = getState();
     clearDrag();
-    if (position && bounds && Math.abs(position.x - start.x) >= 8) onWindow(selectWindow(start.time, position.time, bounds));
+    if (position && bounds && Math.abs(position.x - start.x) >= 8) {
+      const {layout}=getState();
+      onWindow(selectWindow(start.time, position.time, bounds),{source:'drag',nearRight:Math.max(start.x,position.x)>=layout.w-layout.right-12});
+    }
   });
   container.addEventListener('pointercancel', clearDrag);
   container.addEventListener('lostpointercapture', clearDrag);
@@ -85,7 +88,8 @@ export function bindChartNavigation(container, {getState, onWindow, onHover, onL
     // Consume scrolling only over the plot, so the rest of the page still scrolls.
     event.preventDefault();
     const delta = (event.deltaY || event.deltaX) * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 390 : 1);
-    onWindow(zoomWindow(window, bounds, position.time, Math.exp(Math.max(-1, Math.min(1, delta * .002)))));
+    const {layout}=getState();
+    onWindow(zoomWindow(window, bounds, position.time, Math.exp(Math.max(-1, Math.min(1, delta * .002)))),{source:'wheel',nearRight:position.x>=layout.w-layout.right-(layout.w-layout.left-layout.right)*.1});
   }, {passive: false});
   return clearDrag;
 }

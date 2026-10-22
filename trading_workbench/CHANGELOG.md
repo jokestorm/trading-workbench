@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.1.13
+
+- Keep market zooms at the newest edge following incoming quotes while
+  preserving their selected time span. Leave historical selections anchored,
+  show following/historical state and add Follow latest without resetting zoom.
+
+- Fix the position-sync HTTP route returning an empty response. Add a loopback
+  HTTP regression test and retain cancellation when a viewed page is hidden.
+- Handle older analytics responses without a gross field by reconciling net
+  plus fees, and show historical CSV positions in a collapsed, dated section
+  so imported entry prices are not mistaken for current broker holdings.
+
+- Add a transaction-derived futures position card for the selected contract.
+  Sync read-only Accounts and Trading history every 30 seconds while viewed;
+  display the estimated side, contracts, average entry, sync time and last fill.
+  Keep accounts separate and copy estimates into manual analysis controls only
+  when the user confirms Use in analysis.
+- Handle partial exits, scaling and split reversals with decimal quantities
+  and prices. Deduplicate transactions, replace the full 59-day window on sync,
+  persist estimates across restart and show UNKNOWN for incomplete or ambiguous
+  sequences. Retain historical values on sync failures and label all estimates
+  as dependent on a starting-flat assumption and posted transaction availability.
+
 ## 0.1.12
 
 - Carry the previous signal for the same contract, chart source and unchanged

@@ -1,8 +1,9 @@
-import {renderTimeframes} from './timeframe-directions.js?v=ha-0.1.12';
-import {indicatorOverlays,renderTechnicals} from './technical-indicators.js?v=ha-0.1.12';
+import {renderTimeframes} from './timeframe-directions.js?v=ha-0.1.13';
+import {updateMarketWindow,selectMarketWindow} from './market-viewport.js?v=ha-0.1.13';
+import {indicatorOverlays,renderTechnicals} from './technical-indicators.js?v=ha-0.1.13';
 import {createViewedRefresh} from './viewed-refresh.js';
 import { fetchApp } from './http.js';
-import {timeBounds, clampWindow, zoomWindow, pointsInWindow, bindChartNavigation} from './chart-viewport.js?v=ha-0.1.12';
+import {timeBounds, clampWindow, zoomWindow, pointsInWindow, bindChartNavigation} from './chart-viewport.js?v=ha-0.1.13';
 const $=id=>document.getElementById(id),escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const price=n=>n===null?'—':new Intl.NumberFormat('en-US',{maximumFractionDigits:4}).format(n);
 const time=v=>new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(v))+' ET';
@@ -45,8 +46,9 @@ export function selectChartContract(selections,previous='',requested='/MES'){
 export async function mountMonitor(){
  const panel=document.createElement('article');panel.className='panel monitor-panel';panel.innerHTML=`<div class="panel-heading"><div><h2>Chart & signal</h2><p>Choose a contract. Analyze the chart. Act on your signal.</p></div></div><div class="connection-content"><div class="quote-controls"><label>Instrument<select id="monitor-symbol"></select></label><label>Range<select id="monitor-days"><option value="1" selected>24 hours</option><option value="3">3 days</option><option value="7">7 days</option></select></label><button id="monitor-refresh" class="quiet-button" type="button">Update prices</button><div id="monitor-analysis-action" class="chart-analysis-actions"></div></div><div id="monitor-position"></div><div id="monitor-message" role="status"></div><div id="monitor-quotes"></div><div class="chart-tools"><button id="chart-zoom-in" class="quiet-button" type="button">Zoom in</button><button id="chart-zoom-out" class="quiet-button" type="button">Zoom out</button><button id="chart-reset" class="quiet-button" type="button">Full range</button><span id="chart-window" class="small muted"></span></div><div id="monitor-chart" class="price-chart"></div><p id="monitor-hover" class="chart-readout">Drag across a time range to zoom · scroll to zoom at the pointer · double-click to reset.</p><p id="monitor-range" class="small muted"></p><details class="indicator-options"><summary>Chart indicators</summary><label><input id="indicator-ema" type="checkbox" checked> EMA 9 / 21 · blue / purple</label><label><input id="indicator-bands" type="checkbox"> Bollinger Bands 20 / 2 · grey</label></details><section id="monitor-timeframes" aria-label="Direction by timeframe"></section><section id="monitor-technicals" aria-label="Technical indicators"></section><div id="monitor-analysis"></div><details><summary>Watchlist & chart options</summary><form id="monitor-watchlist" class="quote-controls"><label>Watchlist symbols<input id="monitor-symbols" placeholder="/MES, /MGC, /MCL"></label><button class="quiet-button" type="submit">Save</button></form><div class="quote-controls"><label>Chart data<select id="monitor-source"><option value="bars">Minute bars</option><option value="quotes">Quote samples</option></select></label></div><p id="monitor-provenance" class="small muted"></p></details></div>`;
  document.querySelector('#market-panels').before(panel);
+ const followButton=document.createElement('button');followButton.id='chart-follow';followButton.className='quiet-button';followButton.type='button';followButton.textContent='Follow latest';panel.querySelector('.chart-tools').insertBefore(followButton,$('chart-window'));
  let selectedRequest='/MES',technicals=null,timeframeRows=null,dailyController=null,dailySymbol='';const dailyRefreshes=new Map();
- let symbols=[],selections=[],busy=false,version=0,allPoints=[],visiblePoints=[],viewWindow=null,customWindow=false,visibleLayout=null,loadedKey='',fullRange=false;const latest=new Map();
+ let symbols=[],selections=[],busy=false,version=0,allPoints=[],visiblePoints=[],viewWindow=null,customWindow=false,visibleLayout=null,loadedKey='',fullRange=false,following=true;const latest=new Map();
  function options(){const selected=$('monitor-symbol').value;symbols=selections.filter(s=>!s.error).map(s=>s.symbol);$('monitor-symbol').replaceChildren(...selections.filter(s=>!s.error).map(s=>new Option(s.automatic?`${s.requested.slice(1)} · ${s.symbol} (auto)`:s.symbol,s.symbol)));$('monitor-symbol').value=selectChartContract(selections,selected,selectedRequest);if($('monitor-symbol').value!==selected){version++;allPoints=[];technicals=null;timeframeRows=null;dailyController?.abort();customWindow=false;fullRange=false;viewWindow=null;draw();rows();}$('monitor-symbols').value=selections.map(s=>s.requested).join(', ');window.dispatchEvent(new CustomEvent('market-context'));}
  function rows(){ $('monitor-quotes').innerHTML=symbols.filter(s=>s===$('monitor-symbol').value).map(symbol=>{const q=latest.get(symbol);return `<div class="watch-row"><div><strong>${escape(symbol)}</strong><p class="small muted">${q?`${q.realtime===true?'Realtime':q.realtime===false?'Delayed':'Realtime unknown'} · ${q.quoteTime?escape(time(q.quoteTime)):'Quote timestamp unknown'}`:'No saved quote in the last 7 days'}</p></div><div class="watch-price">${q?price(q.last):'—'}<p class="small muted">${q?'Fetched '+escape(time(q.fetchedAt)):''}</p></div></div>`;}).join('');}
  function currentMarker(){return $('monitor-source').value==='bars'?quoteMarker(latest.get($('monitor-symbol').value)):null;}
@@ -57,14 +59,14 @@ export async function mountMonitor(){
   $('monitor-technicals').innerHTML=renderTechnicals(technicals,latest.get($('monitor-symbol').value),{source:$('monitor-source').value});
   const overlays=$('monitor-source').value==='bars'?indicatorOverlays(technicals,{ema:$('indicator-ema').checked,bands:$('indicator-bands').checked}):[];
   const marker=currentMarker(),bounds=marketBounds(allPoints,marker);
-  if(bounds)viewWindow=fullRange?bounds:customWindow&&viewWindow?clampWindow(viewWindow,bounds):clampWindow({start:bounds.end-4*3600000,end:bounds.end},bounds);
+  if(bounds)viewWindow=fullRange?bounds:customWindow&&viewWindow?updateMarketWindow(viewWindow,bounds,following):clampWindow({start:bounds.end-4*3600000,end:bounds.end},bounds);
   else viewWindow=null;
   visiblePoints=viewWindow?pointsInWindow(allPoints,viewWindow):[];
   const width=Math.max(520,Math.min(1000,$('monitor-chart').clientWidth||1000));
   visibleLayout=visiblePoints.length||markerInWindow(marker,viewWindow)?chartLayout(visiblePoints,viewWindow,width,marker,overlays):null;
   const source=$('monitor-source').value;
   $('monitor-chart').innerHTML=priceChart(visiblePoints,source,viewWindow,width,marker,overlays);
-  $('chart-window').textContent=viewWindow?time(viewWindow.start)+' → '+time(viewWindow.end):'';
+  $('chart-window').textContent=viewWindow?(following||!customWindow||fullRange?'Following latest · ':'Historical view · ')+time(viewWindow.start)+' → '+time(viewWindow.end):'';
   $('monitor-hover').textContent='Drag across a time range to zoom · scroll to zoom at the pointer · double-click to reset.';
   const first=visiblePoints[0]?.value,last=visiblePoints.at(-1)?.value;
   $('monitor-range').textContent=visiblePoints.length?visiblePoints.length+' '+(source==='bars'?'minute closes':'quote samples')+' · first '+price(first)+' → last '+price(last)+' · change '+price(last-first)+' ('+(first?((last-first)/first*100).toFixed(2):'—')+'%)':'';
@@ -91,11 +93,11 @@ export async function mountMonitor(){
  for(const id of ['monitor-symbol','monitor-source','monitor-days'])$(id).addEventListener('change',()=>{if(id==='monitor-symbol')selectedRequest=selections.find(item=>item.symbol===$('monitor-symbol').value)?.requested??'/MES';customWindow=false;fullRange=false;viewWindow=null;allPoints=[];technicals=null;timeframeRows=null;dailyController?.abort();draw();rows();chart();poller.update();});
  for(const id of ['indicator-ema','indicator-bands'])$(id).addEventListener('change',draw);
  window.addEventListener('market-prices-updated',()=>chart());
- function setWindow(window){viewWindow=window;customWindow=true;fullRange=false;draw();}
+ function setWindow(window,gesture){const bounds=marketBounds(allPoints,currentMarker());if(!bounds)return;const selected=selectMarketWindow(window,viewWindow,bounds,gesture,following||!customWindow||fullRange);viewWindow=selected.window;following=selected.following;customWindow=true;fullRange=false;draw();}
  const cancelDrag=bindChartNavigation($('monitor-chart'),{
   getState:()=>({layout:visibleLayout,window:viewWindow,bounds:marketBounds(allPoints,currentMarker())}),
   onWindow:setWindow,
-  onReset:()=>{customWindow=false;fullRange=false;viewWindow=null;draw();},
+  onReset:()=>{customWindow=false;fullRange=false;following=true;viewWindow=null;draw();},
   onHover:timestamp=>{
    if(!visiblePoints.length)return;
    const p=nearestPoint(visiblePoints,timestamp),svg=$('monitor-chart').querySelector('svg'),cursor=svg?.querySelector('.chart-cursor');
@@ -108,8 +110,9 @@ export async function mountMonitor(){
   },
   onLeave:()=>$('monitor-chart').querySelector('.chart-cursor')?.setAttribute('hidden','')
  });
- for(const [id,factor] of [['chart-zoom-in',.5],['chart-zoom-out',2]])$(id).addEventListener('click',()=>{const bounds=marketBounds(allPoints,currentMarker());if(bounds&&viewWindow)setWindow(zoomWindow(viewWindow,bounds,(viewWindow.start+viewWindow.end)/2,factor));});
+ for(const [id,factor] of [['chart-zoom-in',.5],['chart-zoom-out',2]])$(id).addEventListener('click',()=>{const bounds=marketBounds(allPoints,currentMarker());if(bounds&&viewWindow)setWindow(zoomWindow(viewWindow,bounds,(viewWindow.start+viewWindow.end)/2,factor),{source:'button',nearRight:true});});
  $('chart-reset').addEventListener('click',()=>{const bounds=marketBounds(allPoints,currentMarker());if(bounds){fullRange=true;viewWindow=bounds;draw();}});
+ followButton.addEventListener('click',()=>{const bounds=marketBounds(allPoints,currentMarker());if(bounds){viewWindow=updateMarketWindow(viewWindow,bounds,true);following=true;customWindow=true;fullRange=false;draw();}});
  let lastWidth=0;
  if(globalThis.ResizeObserver)new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width&&width!==lastWidth){lastWidth=width;if(allPoints.length||currentMarker())draw();}}).observe($('monitor-chart'));
  let pageActive=true;

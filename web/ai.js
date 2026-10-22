@@ -1,7 +1,8 @@
 import { fetchApp } from './http.js';
-import {renderMarketSignal} from './market-signal.js?v=ha-0.1.12';
-import {createAnalysisRuns,activeRun} from './analysis-runs.js?v=ha-0.1.12';
-import { mountCodexLogin } from './codex-login.js?v=ha-0.1.12';
+import {mountBrokerPositions} from './broker-positions.js?v=ha-0.1.13';
+import {renderMarketSignal} from './market-signal.js?v=ha-0.1.13';
+import {createAnalysisRuns,activeRun} from './analysis-runs.js?v=ha-0.1.13';
+import { mountCodexLogin } from './codex-login.js?v=ha-0.1.13';
 import { mountOutcomes } from './outcomes.js?v=decisions-2';
 const $=id=>document.getElementById(id);
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -13,6 +14,7 @@ export function mountAI({getFilters}){
  market.panel.classList.add('chart-analysis');$('monitor-analysis').append(market.panel);
  $('monitor-analysis-action').append(market.panel.querySelector('.connection-actions'));
  $('monitor-position').append(market.panel.querySelector('.position-input').parentElement);
+ mountBrokerPositions($('monitor-position'),{symbol:()=>$('monitor-symbol').value,apply:position=>market.applyPosition(position)});
  market.panel.querySelector('.connection-content > p').remove();
  const journal=workspace('journal','Portfolio review','Review portfolio');
  const journalDetails=document.createElement('details');journalDetails.className='journal-ai-details';journalDetails.innerHTML='<summary>Portfolio review</summary>';journalDetails.append(journal.panel);document.querySelector('.trade-panel').after(journalDetails);
@@ -30,6 +32,7 @@ export function mountAI({getFilters}){
   function context(){if(kind==='saved-market'){const symbol=$('monitor-symbol').value;if(symbol!==positionSymbol){positionSymbol=symbol;const p=positions.get(symbol)??{state:'FLAT',quantity:1,averageEntry:null};positionControls.state.value=p.state;positionControls.quantity.value=p.quantity??1;positionControls.average.value=p.averageEntry??'';positionFields();result.innerHTML='<p class="small muted">Analyze this chart to get a signal.</p>';history(true).catch(e=>historyContainer.textContent=e.message);}}panel.querySelector('.analysis-context').textContent=kind==='saved-market'?`${$('monitor-symbol').value||'Choose an instrument above'} · ${$('monitor-source').value==='bars'?'minute bars':'quote samples'}`:'Current journal filters';update();}
   function positionFields(){if(kind!=='saved-market')return;const active=['LONG','SHORT'].includes(positionControls.state.value);positionControls.size.hidden=!active;positionControls.entry.hidden=!active;}
   function position(){return {state:positionControls.state.value,quantity:Number(positionControls.quantity.value),averageEntry:Number(positionControls.average.value)||null};}
+  function applyPosition(p){if(kind!=='saved-market')return;positionControls.state.value=p.state;positionControls.quantity.value=p.quantity??1;positionControls.average.value=p.averageEntry??'';positions.set(positionSymbol,position());positionFields();}
   if(kind==='saved-market')for(const input of panel.querySelectorAll('.position-input input,.position-input select'))input.addEventListener('change',()=>{positions.set(positionSymbol,position());positionFields();});
   function showPrompt(run){
    const details=document.createElement('details');details.className='saved-prompt';
@@ -41,7 +44,7 @@ export function mountAI({getFilters}){
   function display(run){if(kind==='saved-market'){result.innerHTML=renderMarketSignal(run)+'<details class="signal-followup"><summary>Price follow-up</summary><div></div></details>';const followup=result.querySelector('.signal-followup');let mounted=false;followup.addEventListener('toggle',()=>{if(followup.open&&!mounted){mounted=true;mountOutcomes(run,followup.querySelector('div'));}});showPrompt(run);return;}const r=run.result;result.innerHTML=`<div class="analysis-answer"><p class="small muted">${escape(run.snapshot.symbol??'Trades')} · ${escape(time(run.createdAt))}${run.snapshot.asOf?' · data through '+escape(time(run.snapshot.asOf)):''}</p><h3>${escape(r.summary)}</h3><p>${escape(r.assessment)}</p><h4>What to watch</h4><ul>${r.nextSteps.map(s=>`<li>${escape(s)}</li>`).join('')}</ul><details><summary>Reasoning & limitations</summary>${[['Evidence',r.evidence],['Limitations',r.limitations]].map(([label,items])=>`<h4>${label}</h4><ul>${items.map(s=>`<li>${escape(s)}</li>`).join('')}</ul>`).join('')}<h4>${kind==='journal'?'Applicability':'When this view changes'}</h4><p>${escape(r.invalidation)}</p></details></div>`;mountOutcomes(run,result);showPrompt(run);}
   async function history(showLatest=false,resultId=null){const revision=++historyRevision;const runs=(await api('ai/history')).filter(r=>r.kind===kind&&(kind!=='saved-market'||r.snapshot.symbol===positionSymbol));if(revision!==historyRevision)return;historyContainer.replaceChildren();if(!runs.length){historyContainer.textContent='No previous analyses.';if(showLatest&&kind==='saved-market')result.innerHTML='<p class="small muted">Analyze this chart to get a signal.</p>';return;}if(showLatest)display(runs.find(run=>run.id===resultId)??runs[0]);for(const run of runs){const item=document.createElement('button');item.className='quiet-button history-item';item.textContent=`${run.snapshot.symbol??'Trades'} · ${time(run.createdAt)} · ${run.result.summary}`;item.addEventListener('click',()=>display(run));historyContainer.append(item);}}
   button.addEventListener('click',()=>{if(button.disabled)return;if(kind==='journal'){journalDetails.open=true;journalDetails.scrollIntoView?.({behavior:'smooth',block:'start'});}if(activeRun(runState.job)){message.scrollIntoView?.({behavior:'smooth',block:'center'});runs.check();return;}const input={kind,filters:kind==='journal'?getFilters():undefined,includeNotes:panel.querySelector('.include-notes')?.checked??false,symbol:kind==='saved-market'?$('monitor-symbol').value:undefined,source:$('monitor-source').value,days:Number($('monitor-days').value),position:kind==='saved-market'?position():undefined};runs.start(input);});
-  cancel.addEventListener('click',()=>runs.cancel());context();if(kind==='journal')history(true).catch(e=>historyContainer.textContent=e.message);return{kind,panel,button,login,message,context,update,history};
+  cancel.addEventListener('click',()=>runs.cancel());context();if(kind==='journal')history(true).catch(e=>historyContainer.textContent=e.message);return{kind,panel,button,login,message,context,update,history,applyPosition};
  }
  runs=createAnalysisRuns({request:api,onChange:state=>{
   runState=state;for(const view of [market,journal])view.update();

@@ -28,13 +28,13 @@ test('price autoscale excludes outliers outside the selected time while preservi
 });
 
 function gestureHarness(){
-  const events={},attrs={},windows=[],resets=[],capture=new Set(),layout={w:1000,h:390,left:80,right:85,top:25,bottom:55,first:start,span:60*60_000};
+  const events={},attrs={},windows=[],gestures=[],resets=[],capture=new Set(),layout={w:1000,h:390,left:80,right:85,top:25,bottom:55,first:start,span:60*60_000};
   const svg={getBoundingClientRect:()=>({left:0,top:0,width:1000,height:390})};
   const selection={setAttribute:(k,v)=>attrs[k]=v,removeAttribute:k=>delete attrs[k]};
   const container={querySelector:q=>q==='svg'?svg:q==='.chart-selection'?selection:null,addEventListener:(k,fn)=>events[k]=fn,classList:{add(){},remove(){}},setPointerCapture:id=>capture.add(id),hasPointerCapture:id=>capture.has(id),releasePointerCapture:id=>capture.delete(id)};
-  const cancel=bindChartNavigation(container,{getState:()=>({layout,window:bounds,bounds}),onWindow:w=>windows.push(w),onReset:()=>resets.push(true),onHover(){},onLeave(){}});
+  const cancel=bindChartNavigation(container,{getState:()=>({layout,window:bounds,bounds}),onWindow:(w,gesture)=>{windows.push(w);gestures.push(gesture);},onReset:()=>resets.push(true),onHover(){},onLeave(){}});
   const pointer=(x,extra={})=>({pointerId:1,isPrimary:true,button:0,clientX:x,clientY:150,...extra});
-  return {events,attrs,windows,resets,capture,cancel,pointer};
+  return {events,attrs,windows,gestures,resets,capture,cancel,pointer};
 }
 test('drag gesture shows selection, captures the pointer and zooms only on release',()=>{
   const h=gestureHarness();h.events.pointerdown(h.pointer(700));h.events.pointermove(h.pointer(300));
@@ -59,4 +59,10 @@ test('double-click restores the chart default and releases an unfinished selecti
   h.events.dblclick({preventDefault:()=>prevented=true});
   assert.equal(h.resets.length,1);assert.equal(h.capture.size,0);assert.equal(h.attrs.hidden,'');assert.ok(prevented);
   h.events.pointerup(h.pointer(500));assert.equal(h.windows.length,0);
+});
+test('navigation identifies right-edge wheel and drag gestures for optional live following',()=>{
+ const h=gestureHarness();h.events.wheel({...h.pointer(900),deltaY:-100,preventDefault(){}});
+ assert.deepEqual(h.gestures.at(-1),{source:'wheel',nearRight:true});
+ h.events.wheel({...h.pointer(400),deltaY:-100,preventDefault(){}});assert.equal(h.gestures.at(-1).nearRight,false);
+ h.events.pointerdown(h.pointer(905));h.events.pointerup(h.pointer(600));assert.deepEqual(h.gestures.at(-1),{source:'drag',nearRight:true});
 });

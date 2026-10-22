@@ -1,14 +1,15 @@
-import {mountPromptSettings} from './prompt-settings.js?v=ha-0.1.12';
-import {mountMarketBrief} from './market-brief.js?v=ha-0.1.12';
-import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.12';
+import {mountPromptSettings} from './prompt-settings.js?v=ha-0.1.13';
+import {renderStatementPositions} from './statement-positions.js?v=ha-0.1.13';
+import {mountMarketBrief} from './market-brief.js?v=ha-0.1.13';
+import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.13';
 import { fetchApp, appUrl } from './http.js';
-import { mountJournalChart } from './journal-chart.js?v=ha-0.1.12';
-import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.12';
-import { mountImport } from './import.js?v=ha-0.1.12';
-import { mountReports, renderReports } from './reports.js?v=ha-0.1.12';
-import { mountMarket } from './market.js?v=ha-0.1.12';
-import { mountAI } from './ai.js?v=ha-0.1.12';
-import { mountMonitor } from './market-monitor.js?v=ha-0.1.12';
+import { mountJournalChart } from './journal-chart.js?v=ha-0.1.13';
+import { filterTrades, netPnl, summarize, dateRange, easternToday } from './analytics.js?v=ha-0.1.13';
+import { mountImport } from './import.js?v=ha-0.1.13';
+import { mountReports, renderReports } from './reports.js?v=ha-0.1.13';
+import { mountMarket } from './market.js?v=ha-0.1.13';
+import { mountAI } from './ai.js?v=ha-0.1.13';
+import { mountMonitor } from './market-monitor.js?v=ha-0.1.13';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;
@@ -78,7 +79,7 @@ async function render() {
   if(version!==renderVersion)return;
   const positions=openPositions.filter(p=>(!filters.account||p.account===filters.account)&&(!filters.symbol||p.symbol===filters.symbol));
   positionsPanel.hidden=positions.length===0;
-  positionsPanel.innerHTML=`<div class="panel-heading"><div><h2>Open positions · statement snapshot</h2><p>Excluded from closed-trade metrics. Latest imported statement; date filters do not change this snapshot.</p></div></div><div class="table-wrap"><table><thead><tr><th>Account</th><th>Instrument</th><th>Direction</th><th class="numeric">Qty</th><th class="numeric">Average entry</th><th class="numeric">Entry fees</th></tr></thead><tbody>${positions.map(p=>`<tr><td>${escape(p.account)}</td><td>${escape(p.symbol)}</td><td>${p.quantity>0?'LONG':'SHORT'}</td><td class="numeric">${Math.abs(p.quantity)}</td><td class="numeric">${number(p.averageEntry)}</td><td class="numeric">${money(p.entryFees)}</td></tr>`).join('')}</tbody></table></div>`;
+  positionsPanel.innerHTML=renderStatementPositions(positions);
   $('metrics').innerHTML=renderJournalMetrics(summary);
   journalChart.update(summary.curve,query.toString()); $('chart-count').textContent=`${summary.count} trades`; $('trade-count').textContent=summary.count;
   renderReports(summary);

@@ -20,7 +20,7 @@ public record MarketQuote(string Symbol,string AssetType,decimal? Last,decimal? 
 }
 
 // OAuth and market data are separate from journal persistence. No trading endpoints are used.
-public sealed class SchwabConnection
+public sealed partial class SchwabConnection
 {
     private readonly string path;
     private readonly IDataProtector protector;
