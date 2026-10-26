@@ -128,8 +128,8 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
             {
                 // Exception messages and subprocess output may contain private inputs.
                 logger.LogWarning("Analysis {RunId} stopped stage={Stage} errorType={ErrorType} elapsedSeconds={Elapsed:F1}",job.Id,current?.State,error.GetType().Name,(DateTimeOffset.UtcNow-job.StartedAt).TotalSeconds);
-                var state=stopping?"interrupted":token.IsCancellationRequested?"canceled":"failed";
-                var message=state=="interrupted"?"App stopped during analysis. Start a new analysis when ready.":state=="canceled"?"Analysis canceled.":error is TimeoutException?"Updating prices exceeded 60 seconds. Check Schwab and retry.":error is FormatException?error.Message:"Analysis failed. Check the connection and try again.";
+                var state=stopping?"interrupted":token.IsCancellationRequested?"canceled":error is ConversationPriorityException?"deferred":"failed";
+                var message=state=="interrupted"?"App stopped during analysis. Start a new analysis when ready.":state=="canceled"?"Analysis canceled.":state=="deferred"?"Background AI review yielded to Trader chat. Market and exit monitoring continue.":error is TimeoutException?"Updating prices exceeded 60 seconds. Check Schwab and retry.":error is FormatException?error.Message:"Analysis failed. Check the connection and try again.";
                 // Keep status reads truthful even if the disk itself fails.
                 current=current! with{State=state,Message=message,UpdatedAt=DateTimeOffset.UtcNow};
                 try{Write(current);}catch(IOException){}catch(UnauthorizedAccessException){}

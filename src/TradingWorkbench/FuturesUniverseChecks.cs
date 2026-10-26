@@ -22,5 +22,17 @@ public static class FuturesUniverseChecks
         Check(calls==1&&requested.Length<=100&&requested.Any(s=>s.StartsWith("/M6E"))&&requested.All(FuturesProducts.IsTradingProduct),"discovery batches micro quotes and excludes full-size contracts from watchlists and transaction history");
         Check(selected?.Instruments.Length==2&&selected.Instruments.Any(s=>s.Symbol==FutureContracts.Candidates("/MES",now)[1])&&selected.Instruments.Any(s=>s.Symbol==FutureContracts.Candidates("/MGC",now)[1]),"discovery chooses the most active nonexpired contract and excludes expired quotes");
         Check(selected!.Unavailable.Contains("/MNQ")&&!selected.Unavailable.Contains("/MES"),"unavailable micro products stay visible without requiring users to add or repair symbols");
+        using var stop=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var logger=new DiscoveryLogger(()=>stop.Cancel());
+        var failing=new FuturesUniverse((_,_)=>throw new FormatException("Authorize Schwab first."),()=>[],_=>Task.FromResult(new BrokerTransactionReport("waiting","Fixture")),_=>{},logger);
+        await failing.Run(stop.Token);
+        Check(logger.Message.Contains("Authorize Schwab first."),"failed product discovery logs the actionable reason instead of only FormatException");
+    }
+    private sealed class DiscoveryLogger(Action seen):ILogger<FuturesUniverse>
+    {
+        public string Message="";
+        public IDisposable? BeginScope<TState>(TState state) where TState:notnull=>null;
+        public bool IsEnabled(LogLevel level)=>true;
+        public void Log<TState>(LogLevel level,EventId id,TState state,Exception? exception,Func<TState,Exception?,string> format){Message=format(state,exception);seen();}
     }
 }

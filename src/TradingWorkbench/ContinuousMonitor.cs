@@ -16,7 +16,7 @@ public record MonitorMarket(string Symbol,MonitorPosition Exposure,DateTimeOffse
 public record ProductOpportunity(string Symbol,string Product,string Group,bool Ready,decimal? Last,decimal? SpreadTicks,long? DayVolume,decimal? AtrDollars,decimal? RelativeVolume,string[] Signals,string Position,decimal Score,DateTimeOffset? QuoteTime,DateTimeOffset? BarThrough);
 public record ProductChoice(string Symbol,string Reason,DateTimeOffset Time);
 public record MonitorState(MonitorSettings Settings,MonitorMarket[] Markets,MonitorMemory[] Memory,string? JobId=null,string? JobSymbol=null,string? JobScope=null,string? Message=null,MonitorFillCursor[]? FillCursors=null,BrokerTransactionReport? Transactions=null,FuturesUniverseState? Universe=null,string? PreferredSymbol=null,ProductChoice? LastProductChoice=null);
-public record MonitorAnalysisContext(string Trigger,string ScopeId,long PositionVersion,DateTimeOffset? PositionConfirmedAt,decimal PointValue,decimal TickSize,decimal? CommittedStop,decimal? CommittedTarget,DateTimeOffset? TradeExpiresAt,MonitorMemory[] RecentMemory,string PositionSource="manual",DateTimeOffset? TransactionsSyncedAt=null,ProductOpportunity[]? Opportunities=null,string PositionBasis="manual",decimal? AccountEquity=null,TraderDiscussion[]? Discussion=null);
+public record MonitorAnalysisContext(string Trigger,string ScopeId,long PositionVersion,DateTimeOffset? PositionConfirmedAt,decimal PointValue,decimal TickSize,decimal? CommittedStop,decimal? CommittedTarget,DateTimeOffset? TradeExpiresAt,MonitorMemory[] RecentMemory,string PositionSource="manual",DateTimeOffset? TransactionsSyncedAt=null,ProductOpportunity[]? Opportunities=null,string PositionBasis="manual",decimal? AccountEquity=null,TraderDiscussion[]? Discussion=null,MarketBriefState? MarketBrief=null);
 
 // Durable monitoring and deterministic exits are independent of model latency.
 // Transaction fills advance the explicitly confirmed starting position.
@@ -32,6 +32,8 @@ public sealed class ContinuousMonitor
     private readonly ILogger<ContinuousMonitor> log;
     private readonly Func<BrokerTransactionReport>? transactions;
     private readonly Func<string,string,TraderDiscussion[]>? discussion;
+    private readonly Func<bool> aiAvailable;
+    private readonly Func<MarketBriefState>? briefContext;
     private readonly object sync=new();
     private readonly SemaphoreSlim sweep=new(1,1);
     private MonitorState state;
@@ -39,11 +41,11 @@ public sealed class ContinuousMonitor
 
     public ContinuousMonitor(string directory,Func<MonitorInstrument,bool,CancellationToken,Task<MonitorObservation>> observe,
         Func<AnalysisRequest,Func<AnalysisRun,AnalysisRun>,AnalysisJob?> start,Func<string,AnalysisJob?> job,
-        Func<string,AnalysisRun> result,Action<string> cancel,Func<DateTimeOffset>? clock=null,ILogger<ContinuousMonitor>? logger=null,Func<BrokerTransactionReport>? transactions=null,Func<string,string,TraderDiscussion[]>? discussion=null)
+        Func<string,AnalysisRun> result,Action<string> cancel,Func<DateTimeOffset>? clock=null,ILogger<ContinuousMonitor>? logger=null,Func<BrokerTransactionReport>? transactions=null,Func<string,string,TraderDiscussion[]>? discussion=null,Func<bool>? aiAvailable=null,Func<MarketBriefState>? briefContext=null)
     {
         Directory.CreateDirectory(directory);path=Path.Combine(directory,"current.json");
         this.observe=observe;this.start=start;this.job=job;this.result=result;this.cancel=cancel;this.clock=clock??(()=>DateTimeOffset.UtcNow);
-        this.transactions=transactions;this.discussion=discussion;
+        this.transactions=transactions;this.discussion=discussion;this.aiAvailable=aiAvailable??(()=>true);this.briefContext=briefContext;
         log=logger??Microsoft.Extensions.Logging.Abstractions.NullLogger<ContinuousMonitor>.Instance;
         state=File.Exists(path)?JsonSerializer.Deserialize<MonitorState>(File.ReadAllText(path),CodexAnalysisProvider.Json)!:new(new(false,[]),[],[]);
         ApplyUniverse(new(state.Universe?.CheckedAt,state.Settings.Instruments.Where(s=>FuturesProducts.IsTradingProduct(s.Symbol)).ToArray(),state.Universe?.Unavailable.Where(FuturesProducts.IsTradingProduct).ToArray()??[],"Discovering micro futures products automatically."));
@@ -290,7 +292,8 @@ public sealed class ContinuousMonitor
                 var pending=completed.Result.Decision is {Action:"BUY" or "SELL_SHORT",Guarded:false}&&market.Exposure.Version==version;
                 Save(state with{Memory=memory,Markets=state.Markets.Select(m=>m.Symbol==market.Symbol?m with{Latest=call,AwaitingExecution=m.AwaitingExecution||pending}:m).ToArray()});
             }
-            Save(state with{JobId=null,JobSymbol=null,JobScope=null,Message=completed is not null?"Analysis saved. Monitoring continues.":"Analysis did not complete. Monitoring and deterministic exit checks continue."});
+            if(status?.State=="deferred"&&market is not null)Replace(market with{LastAttempt=null,AttemptBar=null,AttemptPrice=null});
+            Save(state with{JobId=null,JobSymbol=null,JobScope=null,Message=status?.State=="deferred"?"Trader chat has AI priority. Market and exit monitoring continue.":completed is not null?"Analysis saved. Monitoring continues.":"Analysis did not complete. Monitoring and deterministic exit checks continue."});
         }
     }
     private sealed record Candidate(MonitorMarket Market,MonitorInstrument Instrument,DateTimeOffset BarThrough,decimal Price,string Reason,int Priority,decimal Score);
@@ -311,10 +314,11 @@ public sealed class ContinuousMonitor
         var technicals=TechnicalIndicators.Calculate(data.Bars);
         if(technicals.BarsUsed<21||technicals.AsOf is null||now-technicals.AsOf>TimeSpan.FromSeconds(90)||technicals.AsOf>now)return null;
         var newBar=market.AttemptBar is null||technicals.AsOf>market.AttemptBar;
-        var periodic=market.LastAttempt is null||now-market.LastAttempt>=TimeSpan.FromSeconds(state.Settings.ReviewSeconds);
+        var open=market.Exposure.Position.State is "LONG" or "SHORT";
+        var lastReview=open?market.LastAttempt:state.Markets.Where(m=>m.Exposure.Position.State=="FLAT").Select(m=>m.LastAttempt).Max();
+        var periodic=lastReview is null||now-lastReview>=TimeSpan.FromSeconds(state.Settings.ReviewSeconds);
         var moved=technicals.Values?.Atr14 is >0&&market.AttemptPrice.HasValue&&Math.Abs(data.Quote.Last!.Value-market.AttemptPrice.Value)>=technicals.Values.Atr14*.75m;
         var directional=technicals.Signals.Where(s=>s.Direction is "UP" or "DOWN").ToArray();
-        var open=market.Exposure.Position.State is "LONG" or "SHORT";
         var selected=state.PreferredSymbol==market.Symbol;
         var reason=open&&(newBar||moved||periodic)?"Open-position thesis review":selected?"AI-selected product: assess this contract's entry":newBar&&directional.Length>0?string.Join("; ",directional.Select(s=>s.Name+" "+s.Direction)):moved?"Price moved at least 0.75 ATR since the last AI request":periodic?"Periodic opportunity review":null;
         return reason is null?null:new(market,spec,technicals.AsOf.Value,data.Quote.Last!.Value,reason,open?100:selected?90:directional.Length>0?50:moved?40:10,Opportunity(market,spec,data,now).Score);
@@ -358,7 +362,7 @@ public sealed class ContinuousMonitor
             Candidate? candidate;MonitorAnalysisContext context;string revision;
             lock(sync)
             {
-                if(!state.Settings.Enabled||state.JobId is not null)return;
+                if(!state.Settings.Enabled||state.JobId is not null||!aiAvailable())return;
                 now=clock();
                 candidate=state.Markets.Select(m=>observations.TryGetValue(m.Symbol,out var data)&&m.Error is null?Evaluate(m,state.Settings.Instruments.Single(s=>s.Symbol==m.Symbol),data,now):null)
                     .Where(c=>c is not null).OrderByDescending(c=>c!.Priority).ThenByDescending(c=>c!.Score).ThenBy(c=>c!.Market.LastAttempt??DateTimeOffset.MinValue).FirstOrDefault();
@@ -366,7 +370,7 @@ public sealed class ContinuousMonitor
                 var p=candidate.Market.Exposure;revision=state.Settings.Revision;
                 var memory=state.Memory.Where(e=>e.Symbol==candidate.Market.Symbol&&e.ScopeId==p.ScopeId&&e.Time>=now.AddHours(-3)).TakeLast(16).ToArray();
                 var opportunities=state.Markets.Where(m=>observations.ContainsKey(m.Symbol)).Select(m=>Opportunity(m,state.Settings.Instruments.Single(s=>s.Symbol==m.Symbol),observations[m.Symbol],now)).OrderByDescending(o=>o.Ready).ThenByDescending(o=>o.Score).Take(24).ToArray();
-                context=new(candidate.Reason,p.ScopeId,p.Version,p.ConfirmedAt,candidate.Instrument.PointValue,candidate.Instrument.TickSize,p.Stop,p.Target,p.ExpiresAt,memory,p.Source,transactions?.Invoke().LastSynced,opportunities,p.PositionBasis,state.Settings.AccountEquity,discussion?.Invoke(candidate.Market.Symbol,p.ScopeId));
+                context=new(candidate.Reason,p.ScopeId,p.Version,p.ConfirmedAt,candidate.Instrument.PointValue,candidate.Instrument.TickSize,p.Stop,p.Target,p.ExpiresAt,memory,p.Source,transactions?.Invoke().LastSynced,opportunities,p.PositionBasis,state.Settings.AccountEquity,discussion?.Invoke(candidate.Market.Symbol,p.ScopeId),briefContext?.Invoke());
             }
             var request=new AnalysisRequest("saved-market",Symbol:candidate.Market.Symbol,Days:1,Position:candidate.Market.Exposure.Position){MonitorContext=context};
             var admitted=start(request,run=>Guard(run,candidate,revision));

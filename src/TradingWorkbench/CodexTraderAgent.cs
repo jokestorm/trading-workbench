@@ -139,6 +139,7 @@ public sealed class CodexTraderAgent(CodexAnalysisProvider provider,string works
     }
     public async Task Reply(string? thread,string input,Action<string,JsonElement> receive,Func<string,JsonElement,CancellationToken,Task<object>> tool,CancellationToken token)
     {
+        using var priority=await provider.EnterConversation(token);
         await Start(token);this.receive=receive;this.tool=tool;activeThread=thread;activeTurn=null;
         completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
         try

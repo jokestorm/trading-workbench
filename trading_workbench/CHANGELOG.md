@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.15
+
+- Give Trader chat priority over background caller inference and market-brief
+  research. Interrupt lower-priority model work and reconsider deferred reviews
+  with fresh observations after the reply. Keep quote/fill monitoring and
+  deterministic stop, target and expiry checks running during conversations.
+- Coalesce routine opportunity reviews across flat contracts instead of launching
+  one review per product. Preserve material-event and open-position triggers.
+- Use the timestamped shared market brief for routine caller context instead of
+  running separate web research for every trade analysis.
+- Log the actionable futures-discovery error, including authorization renewal
+  instructions, instead of reporting only FormatException.
+
 ## 0.1.14
 
 - Add Trader chat with saved conversations, streamed replies and live account,

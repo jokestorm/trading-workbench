@@ -7,6 +7,7 @@ public static class TraderChatChecks
     private static void Check(bool result,string message){if(!result)throw new Exception(message);Console.WriteLine("PASS "+message);}
     public static async Task Run()
     {
+        await Priority();
         var directory=Path.Combine(Path.GetTempPath(),"trader-chat-check-"+Guid.NewGuid().ToString("N"));
         try
         {
@@ -40,6 +41,36 @@ public static class TraderChatChecks
             await using(var chat=new TraderChat(directory,new FakeAgent(),Tool,Context))Check(!chat.Current().Busy&&chat.Current().Error!.Contains("restarted"),"crash recovery retains conversation history without silently resending a paid turn");
         }
         finally{Directory.Delete(directory,true);}
+    }
+    private static async Task Priority()
+    {
+        var directory=Path.Combine(Path.GetTempPath(),"trader-priority-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
+        using var stop=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var entered=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);var calls=0;
+        var provider=new CodexAnalysisProvider("fixture",runProcess:async(start,_,token)=>
+        {
+            calls++;
+            if(calls==1){entered.TrySetResult();await Task.Delay(Timeout.Infinite,token);}
+            var arguments=start.ArgumentList.ToArray();var answer=new AnalysisResult("Fixture","Saved",["Observed"],["Fixture"],["Review"],"Fixture");
+            await File.WriteAllTextAsync(arguments[Array.IndexOf(arguments,"--output-last-message")+1],JsonSerializer.Serialize(answer,CodexAnalysisProvider.Json),token);return(0,"model: fixture");
+        });
+        var snapshot=JsonSerializer.SerializeToElement(new{kind="saved-market",position=new{state="FLAT"},monitorContext=new{}});
+        var monitor=provider.Analyze(snapshot,directory,stop.Token);
+        try
+        {
+            await entered.Task.WaitAsync(stop.Token);
+            using(var chat=await provider.EnterConversation(stop.Token))
+            {
+                var yielded=false;try{await monitor;}catch(ConversationPriorityException){yielded=true;}
+                Check(yielded&&provider.ConversationActive&&calls==1,"Trader chat preempts active background inference and owns the shared AI slot without overlapping processes");
+                var deferred=false;try{await provider.Analyze(snapshot,directory,stop.Token);}catch(ConversationPriorityException){deferred=true;}
+                var brief=false;try{await provider.AnalyzeBrief(JsonSerializer.SerializeToElement(new{kind="journal"}),directory,stop.Token,new("Fixture","fixture",false,TimeSpan.FromSeconds(30)));}catch(BriefDeferredException){brief=true;}
+                Check(deferred&&brief&&calls==1,"background caller and brief cannot queue model work ahead of an active conversation");
+            }
+            await provider.Analyze(JsonSerializer.SerializeToElement(new{kind="journal"}),directory,stop.Token);
+            Check(!provider.ConversationActive&&calls==2,"releasing conversation priority restores normal inference admission");
+        }
+        finally{stop.Cancel();try{await monitor;}catch(OperationCanceledException){}Directory.Delete(directory,true);}
     }
     private static async Task Finished(TraderChat chat)
     {

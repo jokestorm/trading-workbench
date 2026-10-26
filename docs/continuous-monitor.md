@@ -22,7 +22,10 @@ equity is user-provided context; broker margin availability is not inferred.
 ## Calls and wakeups
 
 The default scan interval is 15 seconds, with a 90-second AI cooldown per contract
-and a five-minute opportunity review. These are resource settings, not trading
+and one shared five-minute opportunity review across flat contracts. Each review
+already compares all ready products; it does not start another routine model run
+for every remaining flat contract. Material signals, price displacement and
+open-position reviews still have their own triggers. These are resource settings, not trading
 hours. There is no weekday filter, forced break, daily loss shutdown or profit
 ceiling. The configurable daily dollar target is displayed for reporting only;
 it does not affect admission, exposure or model instructions.
@@ -39,6 +42,12 @@ periods coalesce into the latest observations rather than queuing old requests.
 The saved run records its monitor origin, triggering observation, specifications,
 position version and scoped memory. Current calls show enter, hold, exit or wait,
 with entry/stop/target when appropriate.
+
+Trader chat has priority over background inference. A chat turn interrupts an
+in-flight caller review or brief and reserves the shared model slot; price/fill
+monitoring and deterministic exits continue. The caller reconsiders deferred
+work after the chat finishes. Routine caller reviews use the timestamped shared
+market brief instead of performing separate web research for each contract.
 
 ## Trade context
 

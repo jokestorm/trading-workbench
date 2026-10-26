@@ -21,6 +21,7 @@ public record AnalysisRun(string Id,string Kind,DateTimeOffset CreatedAt,string 
 }
 public interface IAnalysisProvider { Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null); }
 public record CodexStatus(bool Installed,bool SubscriptionLogin,string Message);
+internal sealed class ConversationPriorityException:OperationCanceledException;
 
 public sealed class CodexAnalysisProvider(string? executable=null,string? home=null,Func<ProcessStartInfo,string?,CancellationToken,Task<(int Exit,string Output)>>? runProcess=null,ILogger<CodexAnalysisProvider>? logger=null):IAnalysisProvider
 {
@@ -28,7 +29,22 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
     private readonly SemaphoreSlim operation=new(1,1);
     private readonly object prioritySync=new();
     private CancellationTokenSource? briefCancellation;
+    private CancellationTokenSource? monitorCancellation;
+    private int conversationRequests;
     private int manualWaiters;
+    public bool ConversationActive {get{lock(prioritySync)return conversationRequests>0;}}
+    public async Task<IDisposable> EnterConversation(CancellationToken token)
+    {
+        lock(prioritySync){conversationRequests++;manualWaiters++;briefCancellation?.Cancel();monitorCancellation?.Cancel();}
+        try{await operation.WaitAsync(token);}
+        catch{lock(prioritySync)conversationRequests--;throw;}
+        finally{lock(prioritySync)manualWaiters--;}
+        return new ConversationLease(this);
+    }
+    private sealed class ConversationLease(CodexAnalysisProvider owner):IDisposable
+    {
+        public void Dispose(){lock(owner.prioritySync){owner.conversationRequests--;owner.operation.Release();}}
+    }
     public IDisposable EnterOperation()
     {
         if(!operation.Wait(0))throw new FormatException("AI is busy signing in or analyzing. Wait for it to finish.");
@@ -68,15 +84,26 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
     public async Task Logout(){using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));var result=await (runProcess??RunProcess)(Start("logout"),null,timeout.Token);if(result.Exit!=0)throw new FormatException("Could not sign out of Codex. Try again.");}
     public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null)
     {
-        lock(prioritySync){manualWaiters++;briefCancellation?.Cancel();}
-        try{await operation.WaitAsync(token);}finally{lock(prioritySync)manualWaiters--;}
-        using var lease=new OperationLease(operation);
-        return await AnalyzeCore(snapshot,directory,token,prompt);
+        var monitor=snapshot.TryGetProperty("monitorContext",out _);
+        using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(token);
+        lock(prioritySync)
+        {
+            if(monitor&&conversationRequests>0)throw new ConversationPriorityException();
+            if(monitor)monitorCancellation=cancellation;
+            manualWaiters++;briefCancellation?.Cancel();
+        }
+        try
+        {
+            await operation.WaitAsync(cancellation.Token);using var lease=new OperationLease(operation);
+            return await AnalyzeCore(snapshot,directory,cancellation.Token,prompt);
+        }
+        catch(OperationCanceledException) when(monitor&&!token.IsCancellationRequested&&cancellation.IsCancellationRequested){throw new ConversationPriorityException();}
+        finally{lock(prioritySync){manualWaiters--;if(ReferenceEquals(monitorCancellation,cancellation))monitorCancellation=null;}}
     }
     internal async Task<AnalysisResult> AnalyzeBrief(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt prompt)
     {
         using var cancellation=CancellationTokenSource.CreateLinkedTokenSource(token);
-        lock(prioritySync){if(manualWaiters>0||!operation.Wait(0))throw new BriefDeferredException();briefCancellation=cancellation;}
+        lock(prioritySync){if(manualWaiters>0||conversationRequests>0||!operation.Wait(0))throw new BriefDeferredException();briefCancellation=cancellation;}
         using var lease=new OperationLease(operation);
         try{return await AnalyzeCore(snapshot,directory,cancellation.Token,prompt);}
         finally{lock(prioritySync)briefCancellation=null;}
@@ -186,7 +213,7 @@ public sealed class AnalysisService
             AnalysisPreview preview;lock(previews){if(string.IsNullOrEmpty(token)||!previews.TryGetValue(token,out preview!)||preview.ExpiresAt<DateTimeOffset.UtcNow)throw new FormatException("Preview expired. Preview the data again.");previews.Remove(token);}
             var id=runId??Guid.NewGuid().ToString("N");var runDirectory=Path.Combine(directory,"runs",id);Directory.CreateDirectory(runDirectory);
             using var timeout=CancellationTokenSource.CreateLinkedTokenSource(cancellation);definition??=FreezePrompt(preview.Kind);var policy=AnalysisPrompts.For(preview.Snapshot,definition);timeout.CancelAfter(policy.TimeLimit);
-            AnalysisResult result;try{result=await provider.Analyze(preview.Snapshot,runDirectory,timeout.Token,policy);}catch(OperationCanceledException){throw new FormatException($"Analysis was canceled or reached its {policy.TimeLimit.TotalSeconds:0}-second limit. Start a new analysis to retry.");}
+            AnalysisResult result;try{result=await provider.Analyze(preview.Snapshot,runDirectory,timeout.Token,policy);}catch(OperationCanceledException error) when(error is not ConversationPriorityException){throw new FormatException($"Analysis was canceled or reached its {policy.TimeLimit.TotalSeconds:0}-second limit. Start a new analysis to retry.");}
             if(preview.Kind=="saved-market")result=DecisionRules.Apply(result,preview.Snapshot,DateTimeOffset.UtcNow);
             var run=new AnalysisRun(id,preview.Kind,DateTimeOffset.UtcNow,"Codex CLI · ChatGPT",provider is CodexAnalysisProvider codex?codex.Model:"Fixture provider",policy.Version,preview.Snapshot,result){PromptText=policy.Text,PromptSource=definition.Source,PromptBaseVersion=definition.BasedOnVersion??definition.Version};
             return run;

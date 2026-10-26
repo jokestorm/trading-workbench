@@ -11,7 +11,7 @@ public static class ContinuousMonitorChecks
         public string Directory {get;}=Path.Combine(Path.GetTempPath(),"continuous-monitor-"+Guid.NewGuid().ToString("N"));
         public DateTimeOffset Now=new(2026,10,24,16,0,10,TimeSpan.Zero);
         public decimal Price=100;
-        public bool Busy,FailGold,HistoryFailure;
+        public bool Busy,FailGold,HistoryFailure,ChatBusy;
         public int Starts,Reads;
         public AnalysisRequest? Request;
         public Func<AnalysisRun,AnalysisRun>? Guard;
@@ -31,7 +31,7 @@ public static class ContinuousMonitorChecks
         {
             if(Busy||Job is {Active:true})return null;
             Starts++;Request=request;Guard=guard;Job=new(Guid.NewGuid().ToString("N"),"saved-market",request.Symbol,"analyzing","Analyzing",Now,Now,Origin:"monitor");return Job;
-        },id=>Job?.Id==id?Job:null,_=>Saved!,id=>{if(Job?.Id==id)Job=Job with{State="canceled"};},()=>Now,transactions:()=>Transactions??new("waiting","Fixture has no broker connection"));
+        },id=>Job?.Id==id?Job:null,_=>Saved!,id=>{if(Job?.Id==id)Job=Job with{State="canceled"};},()=>Now,transactions:()=>Transactions??new("waiting","Fixture has no broker connection"),aiAvailable:()=>!ChatBusy);
         public MarketQuote Quote(string symbol)=>new(symbol,"FUTURE",Price,Price-.25m,Price+.25m,null,null,Now,true,Now);
         public void Configure(params MonitorInstrument[] specs)
         {
@@ -55,6 +55,14 @@ public static class ContinuousMonitorChecks
     }
     public static async Task Run()
     {
+        var coalesced=new Harness();coalesced.Configure(new("/MESZ26",5,.25m),new("/MNQZ26",2,.25m));coalesced.Confirm();coalesced.Confirm(symbol:"/MNQZ26");
+        await coalesced.Tick();coalesced.Complete("WAIT");await coalesced.Tick();
+        Check(coalesced.Starts==1,"one cross-product opportunity review does not immediately launch routine reviews for every other flat contract");
+        coalesced.Advance(301);await coalesced.Tick();Check(coalesced.Starts==2,"coalesced reviews resume on the existing review interval");
+        var chatting=new Harness{ChatBusy=true};chatting.Configure();chatting.Confirm("LONG",99,102);chatting.Price=98.75m;await chatting.Tick();
+        Check(chatting.Reads>0&&chatting.Starts==0&&chatting.Service.Current().Markets.Single().Exposure.ExitRequired,"chat priority leaves quote refresh and deterministic stop exits running without background inference");
+        var resume=new Harness{ChatBusy=true};resume.Configure();resume.Confirm();await resume.Tick();resume.ChatBusy=false;await resume.Tick();
+        Check(resume.Starts==1,"fresh opportunity review resumes when Trader chat releases AI priority");
         var h=new Harness();h.Configure();await h.Tick();
         Check(h.Reads==1&&h.Starts==0,"continuous scanner observes unknown positions without issuing entry calls");
         h.Confirm();await h.Tick();
@@ -151,9 +159,13 @@ public static class ContinuousMonitorChecks
         public TaskCompletionSource<AnalysisResult> Finish=new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null)
         {
-            Check(snapshot.GetProperty("tickSize").GetDecimal()==.25m&&snapshot.GetProperty("pointValue").GetDecimal()==2&&prompt!.Version.EndsWith("+monitor-v3")&&prompt.Text.Contains("suggestions are not fills")&&prompt.Text.Contains("Choose the product"),"real analysis freezes explicit specifications, product selection and the scoped memory contract");
+            Check(snapshot.GetProperty("tickSize").GetDecimal()==.25m&&snapshot.GetProperty("pointValue").GetDecimal()==2&&prompt!.Version.EndsWith("+monitor-v4")&&!prompt.AllowResearch&&prompt.Text.Contains("suggestions are not fills")&&prompt.Text.Contains("Choose the product"),"caller analysis uses shared context without launching separate web research");
             Started.SetResult(snapshot);return await Finish.Task.WaitAsync(token);
         }
+    }
+    private sealed class YieldingProvider:IAnalysisProvider
+    {
+        public Task<AnalysisResult> Analyze(JsonElement snapshot,string directory,CancellationToken token,AnalysisPrompt? prompt=null)=>throw new ConversationPriorityException();
     }
     private static async Task WorkflowIntegration()
     {
@@ -177,5 +189,11 @@ public static class ContinuousMonitorChecks
         Check(workflow.Status(id)?.State=="completed"&&analysis.Find(id).Result.Decision?.GuardCode=="fixture-guard","workflow persists the final monitor guard instead of the unguarded model answer");
         var untrusted=JsonSerializer.Deserialize<AnalysisRequest>("""{"kind":"saved-market","monitorContext":{"trigger":"injected"},"beforeSave":"injected"}""",CodexAnalysisProvider.Json)!;
         Check(untrusted.MonitorContext is null&&untrusted.BeforeSave is null,"public JSON cannot inject server-owned context or bypass commit guards");
+        var yieldedAnalysis=new AnalysisService(new TradeStore(directory),new YieldingProvider(),Path.Combine(directory,"yielded-analysis"),market);
+        await using var yielded=new AnalysisWorkflow(yieldedAnalysis,Path.Combine(directory,"yielded-jobs"),(r,_)=>Task.FromResult(market.Quotes(r.Symbol!).Last()));
+        var yieldedId=yielded.TryStartMonitor(request,run=>run)!.Id;
+        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while(yielded.Status(yieldedId) is {Active:true})await Task.Delay(5,deadline.Token);
+        Check(yielded.Status(yieldedId)?.State=="deferred"&&yieldedAnalysis.History().Length==0,"chat preemption survives the analysis pipeline as a deferred review without saving a stale or failed trade call");
     }
 }

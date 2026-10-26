@@ -24,7 +24,11 @@ Select a contract under **Discussing** to attach the exchange to its current tra
 scope. Up to six completed messages from the preceding three hours, truncated to
 1,600 characters each, join that scope's next caller analysis. Conversations for
 other contracts and old position scopes are excluded. Account-wide discussion
-remains in chat. Chat and the existing caller can run concurrently.
+remains in chat. Chat reserves the shared AI slot and interrupts background
+caller inference or brief research that is already running. New background
+inference waits until the reply finishes; quote polling, transaction tracking
+and deterministic exit checks continue. Deferred caller work is reconsidered
+with current observations rather than queued as an old request.
 
 The transport uses App Server's experimental dynamic tool registration. Protocol
 shapes were checked against the installed Codex JSON schema. Upgrade checks should

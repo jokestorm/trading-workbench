@@ -79,7 +79,7 @@ public sealed class FuturesUniverse
             catch(OperationCanceledException) when(token.IsCancellationRequested){break;}
             catch(Exception e)
             {
-                log.LogWarning("Futures discovery failed errorType={ErrorType}",e.GetType().Name);
+                log.LogWarning("Futures discovery failed errorType={ErrorType} reason={Reason}",e.GetType().Name,e is FormatException?e.Message:"Market discovery request did not finish.");
                 try{await Task.Delay(TimeSpan.FromSeconds(30),token);}catch(OperationCanceledException){break;}
             }
         }

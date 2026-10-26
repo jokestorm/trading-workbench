@@ -64,7 +64,7 @@ await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
 var marketBrief=new MarketBriefService(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"market-brief"),
     (previous,now,directory,token)=>MarketBriefService.Research(aiProvider,previous,now,directory,token),
-    ()=>analysisWorkflow.Current() is {Active:true},app.Services.GetRequiredService<ILogger<MarketBriefService>>());
+    ()=>analysisWorkflow.Current() is {Active:true}||aiProvider.ConversationActive,app.Services.GetRequiredService<ILogger<MarketBriefService>>());
 MarketBriefService.Map(app,marketBrief);
 app.Use(async (context, next) =>
 {
@@ -99,7 +99,7 @@ var continuousMonitor=new ContinuousMonitor(Path.Combine(app.Configuration["Data
         }
         return new MonitorObservation(quote,market.Bars(spec.Symbol,1),historyError);
     },analysisWorkflow.TryStartMonitor,analysisWorkflow.Status,analysis.Find,id=>analysisWorkflow.Cancel(id),
-    logger:app.Services.GetRequiredService<ILogger<ContinuousMonitor>>(),transactions:brokerExecutions.Current,discussion:(symbol,scope)=>traderChat?.Discussion(symbol,scope)??[]);
+    logger:app.Services.GetRequiredService<ILogger<ContinuousMonitor>>(),transactions:brokerExecutions.Current,discussion:(symbol,scope)=>traderChat?.Discussion(symbol,scope)??[],aiAvailable:()=>!aiProvider.ConversationActive,briefContext:marketBrief.Current);
 ContinuousMonitor.Map(app,continuousMonitor);
 var traderDirectory=Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"trader-chat");
 var traderData=new TraderData(accountDashboard,brokerExecutions,continuousMonitor,market,schwab,analysis,marketBrief);
