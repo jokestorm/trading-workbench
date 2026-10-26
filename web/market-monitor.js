@@ -2,12 +2,12 @@ import {renderTimeframes} from './timeframe-directions.js?v=ha-0.1.13';
 import {updateMarketWindow,selectMarketWindow} from './market-viewport.js?v=ha-0.1.13';
 import {indicatorOverlays,renderTechnicals} from './technical-indicators.js?v=ha-0.1.13';
 import {createViewedRefresh} from './viewed-refresh.js';
-import { fetchApp } from './http.js';
+import { fetchApp,readAppJson } from './http.js?v=http-errors-1';
 import {timeBounds, clampWindow, zoomWindow, pointsInWindow, bindChartNavigation} from './chart-viewport.js?v=ha-0.1.13';
 const $=id=>document.getElementById(id),escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const price=n=>n===null?'—':new Intl.NumberFormat('en-US',{maximumFractionDigits:4}).format(n);
 const time=v=>new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}).format(new Date(v))+' ET';
-async function api(path,body,signal){const r=await fetchApp('/api/market/'+path,body===undefined?{signal,cache:'no-store'}:{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.message??'Market request failed.');return data;}
+async function api(path,body,signal){const r=await fetchApp('/api/market/'+path,body===undefined?{signal,cache:'no-store'}:{signal,method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});return readAppJson(r,'Market request');}
 export function series(history,source){return source==='bars'?history.bars.map(b=>({time:b.time,value:b.close})):history.quotes.filter(q=>q.last!==null).map(q=>({time:q.quoteTime??q.fetchedAt,value:q.last}));}
 export function quoteMarker(quote,now=Date.now()){
  if(!quote||!Number.isFinite(quote.last)||!quote.quoteTime)return null;

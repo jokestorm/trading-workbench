@@ -19,14 +19,17 @@ test('market Analyze reads relocated position controls and submits the displayed
   const descriptor=Object.getOwnPropertyDescriptor(selectPrototype,'value');
   Object.defineProperty(selectPrototype,'value',{...descriptor,set(value){for(const option of this.querySelectorAll('option'))option.removeAttribute('selected');this.querySelectorAll('option').forEach(option=>{if(option.value===value)option.setAttribute('selected','');});}});
   const originals=Object.fromEntries(['window','document','fetch','setTimeout','clearTimeout','MutationObserver'].map(key=>[key,globalThis[key]]));
-  const calls=[],timers=new Map();let nextTimer=0;
+  const calls=[],timers=new Map();let nextTimer=0,gatewayFailure=true;
   Object.assign(globalThis,{window,document,MutationObserver:window.MutationObserver,setTimeout:fn=>{timers.set(++nextTimer,fn);return nextTimer;},clearTimeout:id=>timers.delete(id),fetch:async(url,options)=>{
     const path=new URL(url).pathname,body=options?.body?JSON.parse(options.body):undefined;calls.push({path,body});
+    if(path.endsWith('/current')&&gatewayFailure)return new Response('502: Bad Gateway',{status:502,headers:{'Content-Type':'text/plain'}});
     const data=path.endsWith('/positions/sync')?{status:'ready',lastSynced:new Date().toISOString(),positions:[{accountId:'fixture',accountLabel:'Account 1',symbol:'/MESZ26',state:'LONG',quantity:1,averageEntry:5999}]}:path.endsWith('/status')?{installed:true,subscriptionLogin:true,message:'Connected'}:path.endsWith('/login')?{state:'connected'}:path.endsWith('/history')?[]:path.endsWith('/current')?{run:null}:path.endsWith('/runs')?{id:'fixture',kind:body.kind,state:'failed',active:false,message:'Fixture complete'}:null;
     assert.notEqual(data,null,'unexpected API request '+path);return{ok:true,json:async()=>data};
   }});
   try{
     mountAI({getFilters:()=>({symbol:'MES'})});await flush();
+    assert.match(document.querySelector('#market-signal-panel .analysis-message').textContent,/HTTP 502/,'a gateway response should expose the HTTP failure, not a JSON parser exception');
+    gatewayFailure=false;
     const button=document.querySelector('#monitor-analysis-action .analyze');
     assert.equal(button.disabled,false);
     assert.equal(document.querySelector('#market-signal-panel .position-state'),null,'position controls really moved out of the panel');

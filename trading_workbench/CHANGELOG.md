@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.17
+
+- Show the HTTP status and an actionable error when Home Assistant ingress returns
+  plain text or HTML to analysis and market requests. Preserve normal API error
+  messages instead of showing a JSON parser exception beneath Analyze.
+- Refresh cached browser modules after the update. Status polling continues to
+  reconnect without resubmitting an analysis.
+
 ## 0.1.16
 
 - Make Trader chat casual and direct. Remove repeated execution disclaimers,

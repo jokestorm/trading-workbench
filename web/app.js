@@ -10,8 +10,8 @@ import { filterTrades, netPnl, summarize, dateRange, easternToday } from './anal
 import { mountImport } from './import.js?v=ha-0.1.13';
 import { mountReports, renderReports } from './reports.js?v=ha-0.1.13';
 import { mountMarket } from './market.js?v=ha-0.1.13';
-import { mountAI } from './ai.js?v=account-1';
-import { mountMonitor } from './market-monitor.js?v=products-1';
+import { mountAI } from './ai.js?v=http-errors-1';
+import { mountMonitor } from './market-monitor.js?v=http-errors-1';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;

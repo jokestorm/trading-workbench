@@ -1,4 +1,4 @@
-import { fetchApp } from './http.js';
+import { fetchApp,readAppJson } from './http.js?v=http-errors-1';
 import {mountBrokerPositions} from './broker-positions.js?v=ha-0.1.13';
 import {renderMarketSignal} from './market-signal.js?v=ha-0.1.13';
 import {createAnalysisRuns,activeRun} from './analysis-runs.js?v=ha-0.1.13';
@@ -7,7 +7,7 @@ import { mountOutcomes } from './outcomes.js?v=decisions-2';
 const $=id=>document.getElementById(id);
 const escape=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const time=v=>new Date(v).toLocaleString('en-US',{timeZone:'America/New_York'})+' ET';
-async function api(path,body,signal=AbortSignal.timeout(15_000)){const r=await fetchApp('/api/'+path,body===undefined?{signal,cache:'no-store'}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});const data=await r.json();if(!r.ok)throw new Error(data.message??'Analysis request failed.');return data;}
+async function api(path,body,signal=AbortSignal.timeout(15_000)){const r=await fetchApp('/api/'+path,body===undefined?{signal,cache:'no-store'}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});return readAppJson(r,'Analysis request');}
 export function mountAI({getFilters,journalDataSource='journal'}){
  let loginReady=false,runState={job:null,busy:false,error:''};let runs;
  const market=workspace('saved-market','Signal','Analyze');
