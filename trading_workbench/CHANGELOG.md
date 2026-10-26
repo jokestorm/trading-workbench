@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.18
+
+- Fix Trader Send staying disabled on ordinary HTTP Home Assistant origins.
+  Generate secure message identifiers without the HTTPS-only randomUUID API,
+  and unlock the form even if preparing a message fails.
+- Bound chat HTTP requests, preserve drafts and retry identifiers after failed
+  sends, and report gateway errors with their HTTP status.
+
 ## 0.1.17
 
 - Show the HTTP status and an actionable error when Home Assistant ingress returns

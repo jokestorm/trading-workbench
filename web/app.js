@@ -1,5 +1,5 @@
 import {mountPromptSettings} from './prompt-settings.js?v=ha-0.1.13';
-import {mountTraderChat} from './trader-chat.js?v=trader-1';
+import {mountTraderChat} from './trader-chat.js?v=chat-send-1';
 import {mountAccountSync,observeAccountDashboard,renderAccountSource,renderAccountPositions} from './account-dashboard.js?v=account-1';
 import {mountMarketBrief} from './market-brief.js?v=ha-0.1.13';
 import {mountContinuousMonitor} from './continuous-monitor.js?v=micros-1';

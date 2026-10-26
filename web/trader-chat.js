@@ -1,7 +1,13 @@
-import {fetchApp} from './http.js';
+import {fetchApp,readAppJson} from './http.js?v=http-errors-1';
 
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const format=value=>escape(value).replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g,'<strong>$1</strong>');
+function clientId(){
+  // Available on ordinary HTTP Home Assistant origins as well as HTTPS.
+  const bytes=globalThis.crypto.getRandomValues(new Uint8Array(16));bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+  const hex=Array.from(bytes,byte=>byte.toString(16).padStart(2,'0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
 export function renderTraderMessages(messages){
   if(!messages.length)return '<div class="trader-empty"><h2>Talk through the trade.</h2><p>Ask about a setup, challenge the caller’s reasoning, or look back at your results. Trader can read the same transactions and market data as Workbench.</p></div>';
   return messages.map(m=>`<article class="trader-message trader-${m.role==='user'?'user':'assistant'}"><div class="trader-message-meta">${m.role==='user'?'You':'Trader'}${m.symbol?` · ${escape(m.symbol)}`:''} <time>${escape(new Date(m.time).toLocaleTimeString('en-US',{timeZone:'America/New_York',hour:'numeric',minute:'2-digit'}))} ET</time></div><div class="trader-message-text">${format(m.text)}</div>${m.status==='interrupted'?'<small class="muted">Reply interrupted</small>':''}</article>`).join('');
@@ -29,7 +35,7 @@ export function mountTraderChat(){
     section.querySelector('#trader-model').textContent=`${state.model??'Codex'} · ChatGPT plan`;
     if(state.revision!==revision){const nearBottom=messages.scrollHeight-messages.scrollTop-messages.clientHeight<100;messages.innerHTML=renderTraderMessages(state.messages??[]);revision=state.revision;if(nearBottom||busy)messages.scrollTop=messages.scrollHeight;}
   }
-  async function read(path,options){const response=await fetchApp(path,options);const result=await response.json();if(!response.ok)throw new Error(result.message??'Could not reach Trader.');return result;}
+  async function read(path,options){const response=await fetchApp(path,{signal:AbortSignal.timeout(15000),...options});return readAppJson(response,'Trader request');}
   const observer=observeTrader({load:()=>read('/api/ai/trader'),onState:apply,onError:e=>{error.textContent=e.message;},visible:()=>!document.hidden&&!section.hidden});
   async function loadProducts(){
     try{const current=await read('/api/ai/monitor');const previous=symbol.value;symbol.replaceChildren(new Option('Account & all markets',''));for(const market of current.markets??[])symbol.add(new Option(market.symbol,market.symbol));if([...symbol.options].some(o=>o.value===previous))symbol.value=previous;}catch(e){error.textContent=e.message;}
@@ -37,9 +43,11 @@ export function mountTraderChat(){
   section.querySelector('#trader-form').addEventListener('submit',async event=>{
     event.preventDefault();const text=input.value.trim();if(!text||busy||sending)return;
     sending=true;send.disabled=true;error.textContent='';
-    const selectedSymbol=symbol.value||null;
-    if(!pending||pending.text!==text||pending.symbol!==selectedSymbol)pending={clientId:crypto.randomUUID(),text,symbol:selectedSymbol};
-    try{const state=await read('/api/ai/trader/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pending)});input.value='';pending=null;apply(state);observer.update();}catch(e){error.textContent=e.message;}finally{sending=false;send.disabled=busy;}
+    try{
+      const selectedSymbol=symbol.value||null;
+      if(!pending||pending.text!==text||pending.symbol!==selectedSymbol)pending={clientId:clientId(),text,symbol:selectedSymbol};
+      const state=await read('/api/ai/trader/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pending)});input.value='';pending=null;apply(state);observer.update();
+    }catch(e){error.textContent=e.message;}finally{sending=false;send.disabled=busy;}
   });
   input.addEventListener('keydown',event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();section.querySelector('form').requestSubmit();}});
   stop.addEventListener('click',async()=>{stop.disabled=true;try{apply(await read('/api/ai/trader/stop',{method:'POST'}));observer.update();}catch(e){error.textContent=e.message;}finally{stop.disabled=false;}});
