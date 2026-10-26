@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.16
+
+- Make Trader chat casual and direct. Remove repeated execution disclaimers,
+  report-style framing, canned offers and routine data-status footers. Apply the
+  updated conversational instructions when resuming existing conversations.
+
 ## 0.1.15
 
 - Give Trader chat priority over background caller inference and market-brief
