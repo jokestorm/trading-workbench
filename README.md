@@ -19,6 +19,8 @@ ingress, and Schwab access have been verified on the Pi.
 - [Staged migration plan](docs/home-assistant-plan.md)
 - [Install, release, storage, and update instructions](trading_workbench/DOCS.md)
 - [Desktop workflows and existing features](docs/desktop-guide.md)
+- [Continuous futures trade caller](docs/continuous-monitor.md)
+- [Trader chat and conversation memory](docs/trader-chat.md)
 - [Original implementation plan](docs/implementation-plan.md)
 
 ## Local development

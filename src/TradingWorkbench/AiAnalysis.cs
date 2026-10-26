@@ -5,9 +5,14 @@ using System.Text.Json.Nodes;
 namespace TradingWorkbench;
 public record AnalysisPosition(string State="UNKNOWN",int? Quantity=null,decimal? AverageEntry=null);
 public record TradeDecision(string Action,string Reason,decimal? Entry,decimal? Stop,decimal? Target,bool Guarded=false,string? Trend=null,string? GuardCode=null);
-public record AnalysisRequest(string Kind,TradeFilter? Filters=null,bool IncludeNotes=false,string? Symbol=null,string Source="bars",int Days=7,AnalysisPosition? Position=null);
+public record AnalysisRequest(string Kind,TradeFilter? Filters=null,bool IncludeNotes=false,string? Symbol=null,string Source="bars",int Days=7,AnalysisPosition? Position=null,string DataSource="journal")
+{
+    // Server-owned context and guard cannot be supplied through the public JSON API.
+    internal MonitorAnalysisContext? MonitorContext {get;init;}
+    internal Func<AnalysisRun,AnalysisRun>? BeforeSave {get;init;}
+}
 public record AnalysisPreview(string Token,string Kind,DateTimeOffset ExpiresAt,JsonElement Snapshot);
-public record AnalysisResult(string Summary,string Assessment,string[] Evidence,string[] Limitations,string[] NextSteps,string Invalidation,TradeDecision? Decision=null);
+public record AnalysisResult(string Summary,string Assessment,string[] Evidence,string[] Limitations,string[] NextSteps,string Invalidation,TradeDecision? Decision=null,string? PreferredSymbol=null);
 public record AnalysisRun(string Id,string Kind,DateTimeOffset CreatedAt,string Provider,string Model,string PromptVersion,JsonElement Snapshot,AnalysisResult Result)
 {
     public string? PromptText {get;init;}
@@ -85,6 +90,7 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
         var policy=prompt??AnalysisPrompts.For(snapshot);
         var market=snapshot.TryGetProperty("position",out _);
         properties["decision"]=market?JsonNode.Parse("""{"type":"object","additionalProperties":false,"properties":{"trend":{"type":"string","enum":["UP","DOWN","SIDEWAYS","UNCLEAR"]},"action":{"type":"string","enum":["BUY","SELL_SHORT","SELL_CLOSE","BUY_COVER","HOLD","WAIT"]},"reason":{"type":"string","maxLength":180},"entry":{"type":["number","null"]},"stop":{"type":["number","null"]},"target":{"type":["number","null"]}},"required":["trend","action","reason","entry","stop","target"]}"""):new JsonObject{["type"]="null"};
+        if(snapshot.TryGetProperty("monitorContext",out _))properties["preferredSymbol"]=JsonNode.Parse("""{"type":["string","null"],"maxLength":32}""");
         schema["properties"]=properties;schema["required"]=new JsonArray(properties.Select(p=>(JsonNode?)JsonValue.Create(p.Key)).ToArray());
         await File.WriteAllTextAsync(schemaPath,schema.ToJsonString(),token);
         var start=Start("exec","--ignore-user-config","--ignore-rules","--ephemeral","--skip-git-repo-check","--sandbox","read-only","--color","never","-c","forced_login_method=\"chatgpt\"","-c","model_provider=\"openai\"","-c",policy.AllowResearch?"web_search=\"live\"":"web_search=\"disabled\"","-c","features.shell_tool=false","-c","features.remote_plugin=false","--output-schema",schemaPath,"--output-last-message",resultPath,"-");start.WorkingDirectory=directory;
@@ -117,23 +123,32 @@ public sealed class CodexAnalysisProvider(string? executable=null,string? home=n
 
 public sealed class AnalysisService
 {
+    private readonly Func<TradeData[]>? accountTrades;
     private readonly TradeStore trades;private readonly IAnalysisProvider provider;private readonly string directory;
     private readonly Dictionary<string,AnalysisPreview> previews=new();private readonly SemaphoreSlim gate=new(1,1);
     private readonly MarketStore? market;private readonly PromptSettings? prompts;private readonly TimeframeService? timeframes;
-    public AnalysisService(TradeStore trades,IAnalysisProvider provider,string directory,MarketStore? market=null,PromptSettings? prompts=null,TimeframeService? timeframes=null){this.timeframes=timeframes;this.prompts=prompts;this.trades=trades;this.provider=provider;this.directory=directory;this.market=market;Directory.CreateDirectory(directory);}
+    public AnalysisService(TradeStore trades,IAnalysisProvider provider,string directory,MarketStore? market=null,PromptSettings? prompts=null,TimeframeService? timeframes=null,Func<TradeData[]>? accountTrades=null){this.accountTrades=accountTrades;this.timeframes=timeframes;this.prompts=prompts;this.trades=trades;this.provider=provider;this.directory=directory;this.market=market;Directory.CreateDirectory(directory);}
     internal PromptDefinition FreezePrompt(string kind)=>prompts?.Resolve(kind)??AnalysisPrompts.Default(kind);
     public AnalysisPreview Preview(AnalysisRequest request,MarketQuote? refreshedQuote=null)
     {
         object snapshot;
         if(request.Kind=="journal"){
-            var selected=(request.Filters??new()).Apply(trades.List());if(selected.Length==0)throw new FormatException("No saved trades match this range.");if(selected.Length>250)throw new FormatException("Narrow the range to at most 250 trades for this first version.");
-            snapshot=new{kind="journal",provenance="Saved closed trades; timestamps Eastern; USD; no intratrade market path",createdAt=DateTimeOffset.UtcNow,summary=Analytics.Calculate(selected),notesIncluded=request.IncludeNotes,trades=selected.Select((t,i)=>new{label=$"Trade {i+1}",t.Symbol,t.Date,t.Time,t.Direction,t.Quantity,t.NetPnl,t.Fees,t.Risk,notes=request.IncludeNotes?t.Notes[..Math.Min(t.Notes.Length,500)]:null})};
+            if(request.DataSource is not ("journal" or "transactions"))throw new FormatException("Choose saved journal or transaction-derived account data.");
+            var source=request.DataSource=="transactions"?(accountTrades??throw new FormatException("Transaction-derived account data is unavailable."))():trades.List().ToArray();
+            var selected=(request.Filters??new()).Apply(source);if(selected.Length==0)throw new FormatException("No saved trades match this range.");if(selected.Length>250)throw new FormatException("Narrow the range to at most 250 trades for this first version.");
+            snapshot=new{kind="journal",dataSource=request.DataSource,provenance=request.DataSource=="transactions"?"Schwab transaction-derived closed trades; timestamps Eastern; USD; no intratrade market path":"Saved closed trades; timestamps Eastern; USD; no intratrade market path",createdAt=DateTimeOffset.UtcNow,summary=Analytics.Calculate(selected),notesIncluded=request.IncludeNotes,trades=selected.Select((t,i)=>new{label=$"Trade {i+1}",t.Symbol,t.Date,t.Time,t.Direction,t.Quantity,t.NetPnl,t.Fees,t.Risk,notes=request.IncludeNotes?t.Notes[..Math.Min(t.Notes.Length,500)]:null})};
         }else if(request.Kind=="sample-market")snapshot=SampleMarket();else if(request.Kind=="saved-market"){
             var data=JsonSerializer.SerializeToNode((market??throw new FormatException("Market storage is unavailable.")).Snapshot(request.Symbol??"",request.Source,request.Days),CodexAnalysisProvider.Json)!.AsObject();
             var position=DecisionRules.Position(request.Position);
             data["position"]=JsonSerializer.SerializeToNode(new{position.State,position.Quantity,position.AverageEntry,source="Manual input for this dated contract; not broker verified",providedAt=DateTimeOffset.UtcNow},CodexAnalysisProvider.Json);
             var symbol=MarketStore.Symbol(request.Symbol);var root=symbol.TrimStart('/');var instrument=InstrumentCatalog.All.FirstOrDefault(i=>root.StartsWith(i.Root,StringComparison.Ordinal));
             data["pointValue"]=instrument?.PointValue;data["tickSize"]=root.StartsWith("MES")?.25m:root.StartsWith("MGC")?.1m:(root.StartsWith("MCL")||root.StartsWith("CL"))?.01m:root.StartsWith("MET")?.5m:1m;
+            if(request.MonitorContext is {} monitor)
+            {
+                data["monitorContext"]=JsonSerializer.SerializeToNode(monitor,CodexAnalysisProvider.Json);
+                data["pointValue"]=monitor.PointValue;data["tickSize"]=monitor.TickSize;
+                if(monitor.PositionSource=="transactions")data["position"]!["source"]="Schwab transaction fills applied to the confirmed starting position";
+            }
             data["timeframeDirections"]=JsonSerializer.SerializeToNode(timeframes?.Get(symbol),CodexAnalysisProvider.Json);
             data["latestQuote"]=JsonSerializer.SerializeToNode(refreshedQuote??market.Quotes(symbol).LastOrDefault(),CodexAnalysisProvider.Json);
             data["previousSignal"]=JsonSerializer.SerializeToNode(PreviousSignal(symbol,position,request.Source),CodexAnalysisProvider.Json);

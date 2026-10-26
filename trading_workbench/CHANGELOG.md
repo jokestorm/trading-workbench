@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.1.14
+
+- Add Trader chat with saved conversations, streamed replies and live account,
+  market and caller data tools through the existing ChatGPT sign-in. Resume
+  conversations after restart and share contract-specific discussion with the
+  caller's next review of the same position scope.
+- Drive the account dashboard, reports, charts, exports and portfolio review
+  from Schwab transaction history. Fetch the current year from January 1 Eastern;
+  preserve CSV imports separately and show open cycles apart from closed trades.
+- Include unlabelled USD transaction cash charges in fees and preserve expiration
+  settlement costs. Enrich archived fee records without duplicating executions.
+- Add a continuous futures caller with durable trade context and transaction-based
+  fill tracking. Discover nine micro futures products automatically and choose
+  active dated contracts without watching full-size duplicates. Retain existing
+  non-micro exposure for position management until it closes.
+
+- Add legacy explicit journal sync. Archive futures API fills
+  locally and reuse the existing decimal accounting for completed trades,
+  partial exits and reversals. Keep open cycles pending until they close.
+- Reconcile each contract against an exact saved CSV trade before importing
+  API-only trades; preserve matched trade IDs, notes and risk. Deduplicate
+  repeated syncs and later CSV imports. Block missing fees, changed/disappeared
+  executions, conflicting overlaps and changed account mappings.
+- Preserve imported API fill accounting when editing notes. Retain the CSV
+  workflow while live API fee mapping and reconciliation are being verified.
+
 ## 0.1.13
 
 - Keep market zooms at the newest edge following incoming quotes while

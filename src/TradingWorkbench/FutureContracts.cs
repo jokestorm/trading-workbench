@@ -4,12 +4,13 @@ public sealed class FutureContracts(SchwabConnection connection)
 {
     private readonly Dictionary<string,(string Symbol,DateTimeOffset Until)> cache=new();
     private readonly SemaphoreSlim gate=new(1,1);
-    public static bool IsRoot(string symbol)=>symbol is "/MES" or "/MGC" or "/MCL";
+    public static bool IsRoot(string symbol)=>FuturesProducts.All.Any(p=>symbol=="/"+p.Root);
     public static string[] Candidates(string root,DateTimeOffset now)
     {
         var eastern=TimeZoneInfo.ConvertTimeBySystemTimeZoneId(now,"Eastern Standard Time");
         var start=new DateTime(eastern.Year,eastern.Month,1);
-        return Enumerable.Range(0,12).Select(i=>start.AddMonths(i)).Where(d=>root switch{"/MES"=>d.Month%3==0,"/MGC"=>d.Month%2==0,"/MCL"=>true,_=>false}).Take(4).Select(d=>$"{root}{"FGHJKMNQUVXZ"[d.Month-1]}{d.Year%100:00}").ToArray();
+        var months=FuturesProducts.Find(root)?.Months??"";
+        return Enumerable.Range(0,24).Select(i=>start.AddMonths(i)).Where(d=>months.Contains("FGHJKMNQUVXZ"[d.Month-1])).Take(4).Select(d=>$"{root}{"FGHJKMNQUVXZ"[d.Month-1]}{d.Year%100:00}").ToArray();
     }
     public static bool ValidActive(string root,string? symbol)=>symbol is not null&&symbol.StartsWith(root,StringComparison.Ordinal)&&symbol.Length==root.Length+3&&"FGHJKMNQUVXZ".Contains(symbol[root.Length])&&symbol.AsSpan(root.Length+1).ToString().All(char.IsAsciiDigit);
     public static MarketQuote? MostActive(string root,IEnumerable<MarketQuote> quotes,DateTimeOffset now)=>quotes.Where(q=>ValidActive(root,q.Symbol)&&q.Last.HasValue&&q.TotalVolume>0&&q.Expiration>now).OrderByDescending(q=>q.TotalVolume).FirstOrDefault();

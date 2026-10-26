@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace TradingWorkbench;
 
-public record AnalysisJob(string Id,string Kind,string? Symbol,string State,string Message,DateTimeOffset StartedAt,DateTimeOffset UpdatedAt,string? ResultId=null)
+public record AnalysisJob(string Id,string Kind,string? Symbol,string State,string Message,DateTimeOffset StartedAt,DateTimeOffset UpdatedAt,string? ResultId=null,string Origin="manual")
 {
     public bool Active=>State is "preparing" or "refreshing" or "analyzing" or "canceling";
 }
@@ -46,6 +46,24 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
         logger.LogInformation("Analysis {RunId} kind={Kind} stage={Stage} elapsedSeconds={Elapsed:F1}",job.Id,job.Kind,job.State,(DateTimeOffset.UtcNow-job.StartedAt).TotalSeconds);
     }
     public AnalysisJob? Current(){lock(sync)return current;}
+    internal AnalysisJob? Status(string id)
+    {
+        if(!Guid.TryParseExact(id,"N",out _))return null;
+        lock(sync)
+        {
+            if(current?.Id==id)return current;
+            var path=Path.Combine(directory,id+".json");
+            return File.Exists(path)?JsonSerializer.Deserialize<AnalysisJob>(File.ReadAllText(path),CodexAnalysisProvider.Json):null;
+        }
+    }
+    internal AnalysisJob? TryStartMonitor(AnalysisRequest request,Func<AnalysisRun,AnalysisRun> guard)
+    {
+        lock(sync)
+        {
+            if(stopping||current is {Active:true})return null;
+            return Start(request with{BeforeSave=guard});
+        }
+    }
     public AnalysisJob Start(AnalysisRequest request)
     {
         lock(sync)
@@ -63,7 +81,7 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
             var preview=request.Kind=="journal"?analysis.Preview(request):null;
             var prompt=analysis.FreezePrompt(request.Kind);
             var now=DateTimeOffset.UtcNow;
-            var job=new AnalysisJob(Guid.NewGuid().ToString("N"),request.Kind,request.Kind=="saved-market"?request.Symbol:null,"preparing","Preparing data…",now,now);
+            var job=new AnalysisJob(Guid.NewGuid().ToString("N"),request.Kind,request.Kind=="saved-market"?request.Symbol:null,"preparing","Preparing data…",now,now,Origin:request.MonitorContext is null?"manual":"monitor");
             Set(job);cancellation?.Dispose();cancellation=new CancellationTokenSource();
             running=Task.Run(()=>Run(job,request,preview,prompt,cancellation.Token));return job;
         }
@@ -98,6 +116,7 @@ public sealed class AnalysisWorkflow:IAsyncDisposable
                 // Cancellation and committing the result have one ordering:
                 // canceled work cannot later appear as a successful analysis.
                 token.ThrowIfCancellationRequested();
+                if(request.BeforeSave is not null)result=request.BeforeSave(result);
                 logger.LogInformation("Analysis {RunId} stage=saving elapsedSeconds={Elapsed:F1}",job.Id,(DateTimeOffset.UtcNow-job.StartedAt).TotalSeconds);
                 analysis.Save(result);
                 Set(current! with{State="completed",Message="Analysis saved.",UpdatedAt=DateTimeOffset.UtcNow,ResultId=result.Id});

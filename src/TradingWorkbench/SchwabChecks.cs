@@ -28,6 +28,8 @@ public static class SchwabChecks
         await reopened.SaveSettings(new("","","https://127.0.0.1:8182"));Check(JsonSerializer.SerializeToElement(await reopened.Status()).GetProperty("connected").GetBoolean(),"blank app key and secret keep existing encrypted settings");
         var daily=await reopened.PriceHistory("AAPL",daily:true);Check(daily.Length==1&&transport.DailyHistoryRequested,"daily history requests use daily frequency with a year window and authenticated transport");
         var broker=await reopened.FuturesTransactions();Check(broker.Accounts.Single().Fills.Single().Amount==1&&!JsonSerializer.Serialize(broker).Contains("fixture-private-hash")&&transport.AccountGets==2,"account sync uses read-only authenticated requests and keeps raw identifiers inside transport");
+        var easternStart=TimeZoneInfo.ConvertTime(broker.From,TimeZoneInfo.FindSystemTimeZoneById("America/New_York"));
+        Check(easternStart.Year==TimeZoneInfo.ConvertTime(broker.Through,TimeZoneInfo.FindSystemTimeZoneById("America/New_York")).Year&&easternStart.Month==1&&easternStart.Day==1&&easternStart.TimeOfDay==TimeSpan.Zero&&transport.TransactionStart==broker.From,"transaction request covers the current year from January 1 midnight Eastern instead of a 59-day window");
         foreach(var operation in new Func<CancellationToken,Task>[] { token=>reopened.Quote("AAPL",token),token=>reopened.PriceHistory("/MESZ26",token),token=>reopened.FuturesTransactions(token) })
         {
             transport.Block=true;transport.Entered=new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -40,8 +42,10 @@ public static class SchwabChecks
             await reopened.Status().WaitAsync(TimeSpan.FromSeconds(5));
             Check(canceledWait&&canceledHttp,"canceling market work stops queued and active HTTP requests and releases the Schwab lock");
         }
+        var beforeBatch=transport.Calls;var batch=await reopened.Quotes(["AAPL","/MESZ26"]);
+        Check(transport.Calls==beforeBatch+1&&batch.Length==1&&batch[0].Symbol=="AAPL","batched quotes make one authenticated request and preserve available symbols in a partial response");
         await reopened.Disconnect();Check(!JsonSerializer.SerializeToElement(await reopened.Status()).GetProperty("connected").GetBoolean(),"disconnect removes local tokens while keeping app settings");
-        rejected=false;try{await reopened.Quote("AAPL");}catch(FormatException){rejected=true;}Check(rejected&&transport.Calls==6,"disconnected quote requests never reach Schwab");
+        rejected=false;try{await reopened.Quote("AAPL");}catch(FormatException){rejected=true;}Check(rejected&&transport.Calls==7,"disconnected quote requests never reach Schwab");
         Console.WriteLine("All Schwab checks passed using simulated responses; live API access is unverified.");
     }
     private sealed class SimulatedSchwab:HttpMessageHandler
@@ -50,6 +54,7 @@ public static class SchwabChecks
         public bool Block {get;set;}
         public bool DailyHistoryRequested {get;private set;}
         public int AccountGets {get;private set;}
+        public DateTimeOffset? TransactionStart {get;private set;}
         public TaskCompletionSource Entered {get;set;}=new(TaskCreationOptions.RunContinuationsAsynchronously);
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken token)
         {
@@ -64,6 +69,7 @@ public static class SchwabChecks
                 else
                 {
                     var query=QueryHelpers.ParseQuery(request.RequestUri.Query);if(query["types"]!="TRADE"||!query.ContainsKey("startDate")||!query.ContainsKey("endDate"))throw new Exception("Bounded trade history required.");
+                    TransactionStart=DateTimeOffset.Parse(query["startDate"].ToString(),System.Globalization.CultureInfo.InvariantCulture);
                     json=JsonSerializer.Serialize(new[]{new{activityId=1,orderId=2,time=DateTimeOffset.UtcNow.AddMinutes(-1).ToString("O"),status="VALID",transferItems=new[]{new{instrument=new{assetType="FUTURE",symbol="/MESZ26:XCME"},amount=1,price=100,positionEffect="OPENING"}}}});
                 }
             }

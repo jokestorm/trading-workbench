@@ -45,7 +45,7 @@ public static class CsvReader
 public static class CsvImporter
 {
     public static string Fingerprint(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
-    public static (List<ImportedTrade> Trades, List<ImportIssue> Errors, List<string> Warnings, int Rows,List<OpenPosition> OpenPositions) Build(ImportRequest request,bool allowOpenEnd=false)
+    public static (List<ImportedTrade> Trades, List<ImportIssue> Errors, List<string> Warnings, int Rows,List<OpenPosition> OpenPositions) Build(ImportRequest request,bool allowOpenEnd=false,bool allowIncompleteTail=false)
     {
         var rows = CsvReader.Parse(request.Csv);
         var errors = new List<ImportIssue>(); var warnings = new List<string>(); var fills = new List<Execution>();
@@ -124,6 +124,23 @@ public static class CsvImporter
             if(position!=0)
             {
                 if(allowOpenEnd && portions.All(f=>f.Side==(position>0?"BUY":"SELL")))openPositions.Add(new(group.Key.Account,group.Key.Symbol,position,portions.Sum(f=>f.Quantity*f.Price)/Math.Abs(position),portions[0].Multiplier,portions.Sum(f=>f.Fees),portions.ToArray()));
+                else if(allowIncompleteTail)
+                {
+                    decimal running=0,average=0,entryFees=0;
+                    foreach(var portion in portions)
+                    {
+                        var signed=portion.Side=="BUY"?portion.Quantity:-portion.Quantity;
+                        if(running==0||Math.Sign(running)==Math.Sign(signed))
+                        {
+                            average=(Math.Abs(running)*average+portion.Quantity*portion.Price)/(Math.Abs(running)+portion.Quantity);
+                            entryFees+=portion.Fees;
+                        }
+                        else entryFees*=Math.Max(0,Math.Abs(running)-portion.Quantity)/Math.Abs(running);
+                        running+=signed;
+                    }
+                    openPositions.Add(new(group.Key.Account,group.Key.Symbol,position,average,portions[0].Multiplier,entryFees,portions.ToArray()));
+                    warnings.Add($"{group.Key.Symbol}: the latest cycle is still open; its fills remain archived until flat.");
+                }
                 else errors.Add(new(portions[0].Row,$"{group.Key.Symbol} has an unclosed or partly realized position of {position}. Include the complete flat-to-flat history."));
             }
         }

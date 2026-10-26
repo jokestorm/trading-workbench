@@ -51,7 +51,7 @@ public record TradeData
         return errors;
     }
 }
-public class TradeStore
+public partial class TradeStore
 {
     private readonly string connectionString;
     private readonly string directory;
@@ -90,7 +90,7 @@ public class TradeStore
         using var command = db.CreateCommand(); command.Transaction = transaction;
         command.CommandText = "INSERT INTO trades(id, document) VALUES ($id, $document) ON CONFLICT(id) DO UPDATE SET document=excluded.document";
         command.Parameters.AddWithValue("$id", trade.Id); command.Parameters.AddWithValue("$document", JsonSerializer.Serialize(trade, Json)); command.ExecuteNonQuery();
-        if(trade.Source=="CSV") { transaction.Commit();return; }
+        if(trade.Source is "CSV" or "Schwab API") { transaction.Commit();return; }
         foreach (var role in new[] { "ENTRY", "EXIT" })
         {
             using var fill = db.CreateCommand(); fill.Transaction = transaction;
@@ -120,8 +120,9 @@ public class TradeStore
         using var tradeQuery=db.CreateCommand();tradeQuery.CommandText="SELECT COUNT(*) FROM trades WHERE id=$id";tradeQuery.Parameters.AddWithValue("$id",candidate.Trade.Id);
         if((long)tradeQuery.ExecuteScalar()!>0)return "duplicate";
         if(known>0)return "This trade overlaps imported executions but has different grouping. Import the original complete flat-to-flat history or reconcile it first.";
+        if(List().Any(t=>t.Source=="Schwab API"&&BrokerJournalAdapter.Equivalent(t,candidate.Trade)))return "duplicate";
         var start=DateTime.Parse(candidate.Trade.OpenedAt,CultureInfo.InvariantCulture);var end=DateTime.Parse($"{candidate.Trade.Date}T{candidate.Trade.Time}",CultureInfo.InvariantCulture);
-        if(List().Any(t=>t.Source=="CSV" && t.Account==candidate.Trade.Account && t.Symbol==candidate.Trade.Symbol && ((DateTime.Parse(t.OpenedAt,CultureInfo.InvariantCulture)<end && DateTime.Parse($"{t.Date}T{t.Time}",CultureInfo.InvariantCulture)>start) || (t.OpenedAt==candidate.Trade.OpenedAt && t.Date==candidate.Trade.Date && t.Time==candidate.Trade.Time))))return "This period overlaps an imported trade with different execution identities. Reconcile it before importing.";
+        if(List().Any(t=>t.Source is "CSV" or "Schwab API" && t.Account==candidate.Trade.Account && t.Symbol.TrimStart('/')==candidate.Trade.Symbol.TrimStart('/') && ((DateTime.Parse(t.OpenedAt,CultureInfo.InvariantCulture)<end && DateTime.Parse($"{t.Date}T{t.Time}",CultureInfo.InvariantCulture)>start) || (t.OpenedAt==candidate.Trade.OpenedAt && t.Date==candidate.Trade.Date && t.Time==candidate.Trade.Time))))return "This period overlaps an imported trade with different execution identities. Reconcile it before importing.";
         return "new";
     }
     public ImportRequest[] StatementHistory(string account)

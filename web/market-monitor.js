@@ -155,6 +155,14 @@ export async function mountMonitor(){
   onError:error=>{$('monitor-message').textContent=error.message;}
  });
  document.addEventListener('visibilitychange',()=>{if(document.hidden)dailyController?.abort();poller.update();});
+ window.addEventListener('trader-products',event=>work(async()=>{
+  await resolve();const selected=event.detail?.selected;
+  if(selected&&selections.some(item=>item.symbol===selected&&!item.error)){
+   $('monitor-symbol').value=selected;$('monitor-symbol').dispatchEvent(new Event('change'));
+   window.dispatchEvent(new CustomEvent('market-context'));
+   if(event.detail.position)window.dispatchEvent(new CustomEvent('trader-position',{detail:event.detail.position}));
+  }else await chart();
+ }));
  new MutationObserver(()=>{if($('market').hidden)dailyController?.abort();poller.update();}).observe($('market'),{attributes:true,attributeFilter:['hidden']});
  window.addEventListener('pagehide',()=>{pageActive=false;dailyController?.abort();poller.update();});
  window.addEventListener('pageshow',()=>{pageActive=true;poller.update();});

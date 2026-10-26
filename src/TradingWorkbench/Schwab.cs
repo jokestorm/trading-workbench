@@ -110,17 +110,27 @@ public sealed partial class SchwabConnection
     }
     public async Task<MarketQuote> Quote(string symbol,CancellationToken token=default)
     {
-        symbol=symbol?.Trim().ToUpperInvariant()??"";
-        if(symbol.Length is <1 or >32||symbol.Any(c=>!char.IsAsciiLetterOrDigit(c)&&c is not ('/' or '.' or '$' or '-' or ':')))throw new FormatException("Enter one equity or futures symbol.");
+        var quotes=await Quotes([symbol],token);
+        return quotes.SingleOrDefault()??throw new FormatException("No quote returned for that symbol. Futures symbols and entitlements must be verified with Schwab.");
+    }
+    public async Task<MarketQuote[]> Quotes(string[] symbols,CancellationToken token=default)
+    {
+        if(symbols is null||symbols.Length is <1 or >100)throw new FormatException("Request between one and 100 market symbols.");
+        symbols=symbols.Select(MarketStore.Symbol).Distinct().ToArray();
         await gate.WaitAsync(token);try{
             if(vault?.Tokens is null)throw new FormatException("Authorize Schwab first.");
             if(vault.Tokens.AccessExpiresAt<=DateTimeOffset.UtcNow.AddSeconds(60))Persist(vault with{Tokens=await Exchange(new(){{"grant_type","refresh_token"},{"refresh_token",vault.Tokens.RefreshToken}},vault.Tokens,token)});
-            using var request=new HttpRequestMessage(HttpMethod.Get,QueryHelpers.AddQueryString("https://api.schwabapi.com/marketdata/v1/quotes","symbols",symbol));
+            using var request=new HttpRequestMessage(HttpMethod.Get,QueryHelpers.AddQueryString("https://api.schwabapi.com/marketdata/v1/quotes","symbols",string.Join(',',symbols)));
             request.Headers.Authorization=new("Bearer",vault.Tokens!.AccessToken);
             using var response=await http.SendAsync(request,token);
             if(response.StatusCode==HttpStatusCode.Unauthorized){Persist(vault with{Tokens=null});throw new FormatException("Schwab rejected the access token. Authorize again.");}
             if(!response.IsSuccessStatusCode)throw new FormatException($"Schwab quote request failed (HTTP {(int)response.StatusCode}). Check Market Data access and the symbol.");
-            try {using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));return ParseQuote(json.RootElement,symbol,DateTimeOffset.UtcNow);}
+            try
+            {
+                using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(token));var fetched=DateTimeOffset.UtcNow;var results=new List<MarketQuote>();
+                foreach(var symbol in symbols)if(json.RootElement.TryGetProperty(symbol,out var item)&&item.TryGetProperty("quote",out _))results.Add(ParseQuote(json.RootElement,symbol,fetched));
+                return results.ToArray();
+            }
             catch(Exception error) when(error is JsonException or InvalidOperationException or ArgumentOutOfRangeException){throw new FormatException("Schwab returned an unexpected quote response.");}
         }finally{gate.Release();}
     }

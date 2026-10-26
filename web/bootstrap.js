@@ -1,7 +1,8 @@
 try {
-  await import('./app.js?v=ha-0.1.13');
+  await import('./app.js?v=trader-1');
   function openSection(){
-    if(location.hash==='#market')document.querySelector('[data-tab="market"]').click();
+    const section=location.hash.slice(1);
+    if(['market','trader','settings','journal'].includes(section)&&document.getElementById(section)?.hidden)document.querySelector(`[data-tab="${section}"]`).click();
   }
   openSection();
   window.addEventListener('hashchange',openSection);

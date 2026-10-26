@@ -2,7 +2,13 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.AspNetCore.DataProtection;
 using TradingWorkbench;
 
-if (args.Contains("--self-test")) { await BrokerPositionChecks.Run(); await SignalContinuityChecks.Run(); await MarketBriefChecks.Run(); await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if(args.Contains("--self-test")||args.Contains("--trader-test")){await TraderChatChecks.Run();if(args.Contains("--trader-test"))return;}
+if(args.Contains("--self-test")||args.Contains("--account-test")){await AccountDashboardChecks.Run();if(args.Contains("--account-test"))return;}
+if(args.Contains("--self-test")||args.Contains("--universe-test")){await FuturesUniverseChecks.Run();if(args.Contains("--universe-test"))return;}
+if(args.Contains("--self-test")||args.Contains("--execution-test")){await BrokerExecutionChecks.Run();if(args.Contains("--execution-test"))return;}
+if(args.Contains("--self-test"))await ContinuousMonitorChecks.Run();
+if (args.Contains("--self-test")) { await BrokerJournalChecks.Run(); await BrokerPositionChecks.Run(); await SignalContinuityChecks.Run(); await MarketBriefChecks.Run(); await TimeframeChecks.Run(); TechnicalIndicatorChecks.Run(); await PromptSettingsChecks.Run(); StatementExecutionChecks.Run(); CashSettlementChecks.Run(); await AnalysisWorkflowChecks.Run(); await CodexLoginChecks.Run(); HostAccessChecks.Run(); JournalChecks.Run(); ImportChecks.Run(); StatementChecks.Run(); StatementOverlapChecks.Run(); AnalyticsChecks.Run(); await SchwabChecks.Run(); await AnalysisChecks.Run(); MarketChecks.Run(); OutcomeChecks.Run(); return; }
+if(args.Contains("--monitor-test")){await ContinuousMonitorChecks.Run();return;}
 if(args.Contains("--workflow-test")){await AnalysisWorkflowChecks.Run();return;}
 if(args.Contains("--signal-continuity-test")){await SignalContinuityChecks.Run();return;}
 if(args.Contains("--settlement-test")){CashSettlementChecks.Run();return;}
@@ -45,11 +51,15 @@ await using var codexLogin=new CodexLoginService(()=>new CodexLoginSession(aiPro
 var market=new MarketStore(app.Configuration["DataDirectory"]??Path.Combine(root,"data"));
 var brokerPositions=new BrokerPositionService(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"broker-positions"),schwab.FuturesTransactions);
 BrokerPositionService.Map(app,brokerPositions);
+var brokerJournal=new BrokerJournalService(store,schwab.FuturesTransactions);
+BrokerJournalService.Map(app,brokerJournal);
+var brokerExecutions=new BrokerExecutionService(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"broker-executions"),schwab.FuturesTransactions,app.Services.GetRequiredService<ILogger<BrokerExecutionService>>());
+var accountDashboard=new AccountDashboard(store,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"account-dashboard"),brokerExecutions.Refresh,app.Services.GetRequiredService<ILogger<AccountDashboard>>());
 var timeframes=new TimeframeService(market,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"daily-history"),(symbol,token)=>schwab.PriceHistory(symbol,token,daily:true));
 TimeframeService.Map(app,timeframes);
 var promptSettings=new PromptSettings(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"prompt-settings"));
 PromptSettings.Map(app,promptSettings);
-var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market,promptSettings,timeframes);
+var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market,promptSettings,timeframes,accountDashboard.Trades);
 await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis","jobs"),(request,token)=>MarketRoutes.RefreshForAnalysis(market,schwab,request,token),app.Services.GetRequiredService<ILogger<AnalysisWorkflow>>());
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
 var marketBrief=new MarketBriefService(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"market-brief"),
@@ -58,7 +68,7 @@ var marketBrief=new MarketBriefService(Path.Combine(app.Configuration["DataDirec
 MarketBriefService.Map(app,marketBrief);
 app.Use(async (context, next) =>
 {
-    if(context.Request.Path.StartsWithSegments("/api/schwab")||context.Request.Path.StartsWithSegments("/api/ai"))context.Response.Headers.CacheControl="no-store";
+    if(context.Request.Path.StartsWithSegments("/api/schwab")||context.Request.Path.StartsWithSegments("/api/ai")||context.Request.Path.StartsWithSegments("/api/account"))context.Response.Headers.CacheControl="no-store";
     if (!HostAccess.Allowed(context, ingress)) { context.Response.StatusCode = 403; return; }
     if (ingress && context.Request.Method == "GET" && context.Request.Path.Value is "/" or "/index.html")
     {
@@ -71,9 +81,32 @@ app.Use(async (context, next) =>
 });
 app.MapGet("/api/status", () => new { stage = 5, aiPilot=true, storage = "SQLite", instruments = InstrumentCatalog.All });
 SchwabRoutes.Map(app,schwab);
-MarketRoutes.Map(app,market,schwab,timeframes);
 AnalysisService.Map(app,analysis,aiProvider);
 AnalysisWorkflow.Map(app,analysisWorkflow);
+BrokerExecutionService.Map(app,brokerExecutions);
+AccountDashboard.Map(app,accountDashboard);
+TraderChat? traderChat=null;
+var continuousMonitor=new ContinuousMonitor(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"continuous-monitor"),
+    async(spec,refreshBars,token)=>
+    {
+        var quote=await schwab.Quote(spec.Symbol,token);token.ThrowIfCancellationRequested();market.SaveQuote(quote);
+        string? historyError=null;
+        if(refreshBars)
+        {
+            using var historyTimeout=CancellationTokenSource.CreateLinkedTokenSource(token);historyTimeout.CancelAfter(TimeSpan.FromSeconds(8));
+            try{var bars=await schwab.PriceHistory(spec.Symbol,historyTimeout.Token);token.ThrowIfCancellationRequested();market.SaveBars(bars);}
+            catch(Exception e) when(e is FormatException or HttpRequestException||e is OperationCanceledException&&!token.IsCancellationRequested){historyError="History refresh failed. Quote-based exit monitoring continues.";}
+        }
+        return new MonitorObservation(quote,market.Bars(spec.Symbol,1),historyError);
+    },analysisWorkflow.TryStartMonitor,analysisWorkflow.Status,analysis.Find,id=>analysisWorkflow.Cancel(id),
+    logger:app.Services.GetRequiredService<ILogger<ContinuousMonitor>>(),transactions:brokerExecutions.Current,discussion:(symbol,scope)=>traderChat?.Discussion(symbol,scope)??[]);
+ContinuousMonitor.Map(app,continuousMonitor);
+var traderDirectory=Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"trader-chat");
+var traderData=new TraderData(accountDashboard,brokerExecutions,continuousMonitor,market,schwab,analysis,marketBrief);
+await using var trader=new TraderChat(traderDirectory,new CodexTraderAgent(aiProvider,Path.Combine(traderDirectory,"workspace")),traderData.Tool,traderData.Context);
+traderChat=trader;TraderChat.Map(app,trader);
+MarketRoutes.Map(app,market,schwab,timeframes,()=>continuousMonitor.Current().Settings.Instruments);
+var futuresUniverse=new FuturesUniverse(async(symbols,token)=>{var quotes=await schwab.Quotes(symbols,token);foreach(var quote in quotes)market.SaveQuote(quote);return quotes;},market.Watchlist,brokerExecutions.Refresh,continuousMonitor.ApplyUniverse,app.Services.GetRequiredService<ILogger<FuturesUniverse>>());
 CodexLoginService.Map(app,codexLogin);
 app.MapGet("/api/analytics",(HttpRequest request)=>
 {
@@ -100,7 +133,7 @@ app.MapPut("/api/trades/{id}", (string id, TradeData input) =>
 {
     var existing=store.List().FirstOrDefault(t=>t.Id==id);
     if (existing is null) return Results.NotFound();
-    var candidate=existing.Source=="CSV"?existing with{Notes=input.Notes??"",Risk=input.Risk}:input with{Account=existing.Account,Source="Manual",AccountingGrossPnl=null};
+    var candidate=existing.Source is "CSV" or "Schwab API"?existing with{Notes=input.Notes??"",Risk=input.Risk}:input with{Account=existing.Account,Source="Manual",AccountingGrossPnl=null};
     var errors = candidate.Validate();
     if (errors.Count > 0) return Results.ValidationProblem(errors);
     var trade = candidate with { Id = id, Symbol = candidate.Symbol.Trim().ToUpperInvariant(), Notes = (candidate.Notes ?? "").Trim() };
@@ -123,4 +156,8 @@ app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
 app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
 using var briefStop=CancellationTokenSource.CreateLinkedTokenSource(app.Lifetime.ApplicationStopping);
 var briefTask=marketBrief.Run(briefStop.Token);
-try{await app.RunAsync();}finally{briefStop.Cancel();await briefTask;}
+var monitorTask=continuousMonitor.Run(briefStop.Token);
+var executionsTask=brokerExecutions.Run(()=>continuousMonitor.Current().Settings.Enabled,briefStop.Token);
+var universeTask=futuresUniverse.Run(briefStop.Token);
+var dashboardTask=accountDashboard.Run(briefStop.Token);
+try{await app.RunAsync();}finally{briefStop.Cancel();await Task.WhenAll(briefTask,monitorTask,executionsTask,universeTask,dashboardTask);}
