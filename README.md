@@ -1,7 +1,7 @@
 # Trading Workbench
 
 A personal trade journal with P/L charts and ranged reports, plus a futures market
-workspace for Schwab data and position-aware AI analysis. Built with .NET 10,
+workspace for Schwab data and conversational AI. Built with .NET 10,
 SQLite, and vanilla JavaScript. AI uses Codex CLI with a ChatGPT subscription.
 
 ## Home Assistant target
@@ -19,7 +19,7 @@ ingress, and Schwab access have been verified on the Pi.
 - [Staged migration plan](docs/home-assistant-plan.md)
 - [Install, release, storage, and update instructions](trading_workbench/DOCS.md)
 - [Desktop workflows and existing features](docs/desktop-guide.md)
-- [Continuous futures trade caller](docs/continuous-monitor.md)
+- Background AI is disabled as of 0.1.19; only user messages in Trader chat use AI.
 - [Trader chat and conversation memory](docs/trader-chat.md)
 - [Original implementation plan](docs/implementation-plan.md)
 

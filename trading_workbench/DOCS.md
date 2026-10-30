@@ -56,86 +56,33 @@ Linux data-protection keys and Schwab settings require private filesystem access
 the startup script creates files with a restrictive umask. HA backups containing
 them must also be treated as private. Windows DPAPI files cannot be reused.
 
-## ChatGPT analysis (0.1.2 onward)
+## Trader chat (0.1.19 onward)
 
-The container bundles Codex CLI 0.162.1 for ARM64. Open Market, expand **ChatGPT
-connection** under Market analysis, and choose **Sign in with ChatGPT**. Open
-the official OpenAI link on your phone or computer and enter the one-time code.
-Keep the app running until it shows **ChatGPT connected**. If device-code login
-is unavailable, enable it in your ChatGPT account's security settings first.
+AI runs only when you send a message in **Trader chat**. There is no background
+caller, scheduled market research, Analyze button, or portfolio review action.
+Previously enabled caller settings are disabled on startup. Schwab transaction
+sync, automatic micro contract discovery, charts, and indicators remain available
+without AI usage. Reading chat progress or opening a page does not start inference.
 
-Then select an instrument, enter your current position, and choose **Analyze**.
-The button sits beside the chart controls and names the selected dated contract.
-The chart defaults to MES when it is available in the watchlist. Changing the
-contract changes the analysis target and its visible signal history. Use
-**Review portfolio** in the journal toolbar for a separate review of the filtered
-closed trades; it opens the journal's Portfolio review section.
-Journal analysis shares the same login. Check connection, Cancel sign-in, and
-Sign out are available in the connection section. Analysis sends the selected
-snapshot to OpenAI using the ChatGPT account; it does not place broker orders.
+The container bundles Codex CLI 0.162.1 for ARM64. Open **Settings**, expand
+**ChatGPT connection**, and choose **Sign in with ChatGPT**. Open the official
+OpenAI link and enter the one-time code. Keep the app running until it shows
+**ChatGPT connected**. Check connection and Sign out are available there too.
 
-One analysis runs at a time across Market and Journal. Progress appears in both
-sections. You can close the page or lose your phone connection; the run continues
-and the app reconnects to its progress or saved result when reopened. Use Cancel
-to stop it explicitly. Restarting the app interrupts unfinished analysis without
-automatically submitting another request. Start a fresh analysis to retry.
+Open **Trader chat**, select an optional contract, and send your message. Trader
+can read account transactions and fetch current market data during that reply.
+Use **Stop reply** to interrupt it. Replies have a four-minute timeout. Restarting
+the app interrupts a reply without automatically resubmitting it. Conversation
+history survives updates under `/data/workbench/trader-chat`.
 
-Market analysis may perform brief live web research for relevant catalysts and
-economic releases. The prompt requests at most two searches and two page opens,
-targeting 20 seconds of research; these are model instructions, not separate
-enforced tool limits. The entire market analysis execution has a 90-second hard
-timeout. Market results display only trend, a position-aware action, a short
-reason, and relevant entry/stop/target levels. Research runs quietly; references
-and unavailable-research messages are omitted. Price follow-up is collapsed.
-Frozen Schwab observations remain authoritative for prices and position
-checks. Research cannot override stale-data WAIT results. Journal review uses a
-separate prompt with web search disabled and a four-minute execution timeout.
+Chat uses your ChatGPT plan allowance. The app stores Codex credentials under
+`/data/workbench/codex`; protect app backups containing that private directory.
+Existing analysis history and saved prompts remain in private storage, but the
+old analysis controls and inference endpoints have been removed.
 
-Run status is stored under `/data/workbench/analysis/jobs`; completed results
-remain in `/data/workbench/analysis`. Both survive app updates and restarts.
-
-The app uses `/data/workbench/codex` for its own Codex credentials. This directory
-survives restarts and updates and is included in app backups. Codex manages token
-refresh. Its file credential cache is plaintext in private storage, so protect
-HA backups as well. No credentials are embedded in the image or Git repository.
-The desktop PC's login is not transferred. A pending sign-in must be restarted
-if the app restarts before authorization finishes.
-
-GitHub checks the bundled ARM64 CLI and local auth protocol without a real login
-or model call. First actual ChatGPT sign-in and inference on the Pi remain
-post-install checks; this is a personal app with manual analysis.
-
-## Diagnosing analysis delays
-
-Open **Settings → Apps → Trading Workbench → Log**, then press Analyze.
-Lines beginning with `Analysis` share a run ID. Follow `preparing`, `refreshing`,
-`analyzing`, `saving`, and `completed`, or a terminal failure/cancellation state.
-Active runs report their stage and total elapsed seconds every 15 seconds.
-`Codex starting` and `Codex exited` distinguish model time from price refresh
-and saving. A failed Codex process reports its exit code and a safe category
-when recognized; raw output and private inputs are withheld.
-
-Price refresh has a 60-second limit. Codex execution is limited to 90 seconds
-for market analysis and 240 seconds for journal review, separately from refresh.
-If a run fails, share the `Analysis` lines for its run ID to locate the delay.
-
-## Personal analysis prompts
-
-Open **Settings → Prompts** in Trading Workbench to view or edit market analysis
-and journal review separately. **Save custom** activates your text; **Reset edits**
-discards only unsaved edits. **Use latest default** removes your customization and
-follows the app's default again. The app attaches the selected data automatically.
-
-Custom prompts persist under `/data/workbench/prompt-settings` through restarts,
-updates, and app backups. New releases replace the app defaults but leave custom
-text unchanged. A **New default available** banner offers a comparison. Copy the
-default to your editor, or manually incorporate selected changes and mark the
-default reviewed before saving. Changes affect the next analysis, not active runs.
-
-Each new analysis saves its exact prompt, including its frozen input data, in
-private analysis history. Expand **Prompt used** to inspect it. Older results
-retain their version but may not have exact text. Data checks, allowed actions,
-structured output, research access, and time limits remain app controlled.
+To prevent the previous version from consuming more allowance, stop the app
+while waiting to install 0.1.19 or later. After updating, reopen Workbench from
+the Home Assistant sidebar to refresh cached browser modules.
 
 ## Updating
 
