@@ -58,14 +58,11 @@ var accountDashboard=new AccountDashboard(store,Path.Combine(app.Configuration["
 var timeframes=new TimeframeService(market,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"daily-history"),(symbol,token)=>schwab.PriceHistory(symbol,token,daily:true));
 TimeframeService.Map(app,timeframes);
 var promptSettings=new PromptSettings(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"prompt-settings"));
-PromptSettings.Map(app,promptSettings);
 var analysis=new AnalysisService(store,aiProvider,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis"),market,promptSettings,timeframes,accountDashboard.Trades);
-await using var analysisWorkflow=new AnalysisWorkflow(analysis,Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"analysis","jobs"),(request,token)=>MarketRoutes.RefreshForAnalysis(market,schwab,request,token),app.Services.GetRequiredService<ILogger<AnalysisWorkflow>>());
 var ingress=app.Configuration.GetValue<bool>("HomeAssistantIngress");
+// Historical brief storage only; no research or scheduler.
 var marketBrief=new MarketBriefService(Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"market-brief"),
-    (previous,now,directory,token)=>MarketBriefService.Research(aiProvider,previous,now,directory,token),
-    ()=>analysisWorkflow.Current() is {Active:true}||aiProvider.ConversationActive,app.Services.GetRequiredService<ILogger<MarketBriefService>>());
-MarketBriefService.Map(app,marketBrief);
+    (_,_,_,_)=>throw new InvalidOperationException("Background AI is disabled."),()=>true);
 app.Use(async (context, next) =>
 {
     if(context.Request.Path.StartsWithSegments("/api/schwab")||context.Request.Path.StartsWithSegments("/api/ai")||context.Request.Path.StartsWithSegments("/api/account"))context.Response.Headers.CacheControl="no-store";
@@ -81,8 +78,7 @@ app.Use(async (context, next) =>
 });
 app.MapGet("/api/status", () => new { stage = 5, aiPilot=true, storage = "SQLite", instruments = InstrumentCatalog.All });
 SchwabRoutes.Map(app,schwab);
-AnalysisService.Map(app,analysis,aiProvider);
-AnalysisWorkflow.Map(app,analysisWorkflow);
+app.MapGet("/api/ai/status",()=>aiProvider.Status());
 BrokerExecutionService.Map(app,brokerExecutions);
 AccountDashboard.Map(app,accountDashboard);
 TraderChat? traderChat=null;
@@ -98,9 +94,10 @@ var continuousMonitor=new ContinuousMonitor(Path.Combine(app.Configuration["Data
             catch(Exception e) when(e is FormatException or HttpRequestException||e is OperationCanceledException&&!token.IsCancellationRequested){historyError="History refresh failed. Quote-based exit monitoring continues.";}
         }
         return new MonitorObservation(quote,market.Bars(spec.Symbol,1),historyError);
-    },analysisWorkflow.TryStartMonitor,analysisWorkflow.Status,analysis.Find,id=>analysisWorkflow.Cancel(id),
-    logger:app.Services.GetRequiredService<ILogger<ContinuousMonitor>>(),transactions:brokerExecutions.Current,discussion:(symbol,scope)=>traderChat?.Discussion(symbol,scope)??[],aiAvailable:()=>!aiProvider.ConversationActive,briefContext:marketBrief.Current);
-ContinuousMonitor.Map(app,continuousMonitor);
+    },(_,_)=>null,_=>null,analysis.Find,_=>{},
+    logger:app.Services.GetRequiredService<ILogger<ContinuousMonitor>>(),transactions:brokerExecutions.Current,discussion:(symbol,scope)=>traderChat?.Discussion(symbol,scope)??[],aiAvailable:()=>false,briefContext:marketBrief.Current,chatOnly:true);
+// Read-only contract context, without caller controls.
+app.MapGet("/api/ai/monitor",()=>continuousMonitor.Current());
 var traderDirectory=Path.Combine(app.Configuration["DataDirectory"]??Path.Combine(root,"data"),"trader-chat");
 var traderData=new TraderData(accountDashboard,brokerExecutions,continuousMonitor,market,schwab,analysis,marketBrief);
 await using var trader=new TraderChat(traderDirectory,new CodexTraderAgent(aiProvider,Path.Combine(traderDirectory,"workspace")),traderData.Tool,traderData.Context);
@@ -154,10 +151,9 @@ app.MapPost("/api/imports/commit",(CommitRequest request)=>
 var files = new PhysicalFileProvider(Path.Combine(root, "web"));
 app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = files });
 app.UseStaticFiles(new StaticFileOptions { FileProvider = files });
-using var briefStop=CancellationTokenSource.CreateLinkedTokenSource(app.Lifetime.ApplicationStopping);
-var briefTask=marketBrief.Run(briefStop.Token);
-var monitorTask=continuousMonitor.Run(briefStop.Token);
-var executionsTask=brokerExecutions.Run(()=>continuousMonitor.Current().Settings.Enabled,briefStop.Token);
-var universeTask=futuresUniverse.Run(briefStop.Token);
-var dashboardTask=accountDashboard.Run(briefStop.Token);
-try{await app.RunAsync();}finally{briefStop.Cancel();await Task.WhenAll(briefTask,monitorTask,executionsTask,universeTask,dashboardTask);}
+// Background services fetch broker data only. Inference requires a chat message.
+using var dataStop=CancellationTokenSource.CreateLinkedTokenSource(app.Lifetime.ApplicationStopping);
+var executionsTask=brokerExecutions.Run(()=>true,dataStop.Token);
+var universeTask=futuresUniverse.Run(dataStop.Token);
+var dashboardTask=accountDashboard.Run(dataStop.Token);
+try{await app.RunAsync();}finally{dataStop.Cancel();await Task.WhenAll(executionsTask,universeTask,dashboardTask);}

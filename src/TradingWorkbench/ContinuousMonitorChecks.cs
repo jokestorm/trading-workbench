@@ -20,7 +20,7 @@ public static class ContinuousMonitorChecks
         public BrokerTransactionReport? Transactions;
         public ContinuousMonitor Service;
         public Harness(){Service=Create();}
-        public ContinuousMonitor Create()=>new(Directory,(spec,_,_)=>
+        public ContinuousMonitor Create(bool chatOnly=false)=>new(Directory,(spec,_,_)=>
         {
             Reads++;
             if(FailGold&&spec.Symbol=="/MGCZ26")throw new HttpRequestException("PRIVATE RESPONSE");
@@ -31,7 +31,7 @@ public static class ContinuousMonitorChecks
         {
             if(Busy||Job is {Active:true})return null;
             Starts++;Request=request;Guard=guard;Job=new(Guid.NewGuid().ToString("N"),"saved-market",request.Symbol,"analyzing","Analyzing",Now,Now,Origin:"monitor");return Job;
-        },id=>Job?.Id==id?Job:null,_=>Saved!,id=>{if(Job?.Id==id)Job=Job with{State="canceled"};},()=>Now,transactions:()=>Transactions??new("waiting","Fixture has no broker connection"),aiAvailable:()=>!ChatBusy);
+        },id=>Job?.Id==id?Job:null,_=>Saved!,id=>{if(Job?.Id==id)Job=Job with{State="canceled"};},()=>Now,transactions:()=>Transactions??new("waiting","Fixture has no broker connection"),aiAvailable:()=>!ChatBusy,chatOnly:chatOnly);
         public MarketQuote Quote(string symbol)=>new(symbol,"FUTURE",Price,Price-.25m,Price+.25m,null,null,Now,true,Now);
         public void Configure(params MonitorInstrument[] specs)
         {
@@ -55,6 +55,11 @@ public static class ContinuousMonitorChecks
     }
     public static async Task Run()
     {
+        var chatOnly=new Harness();chatOnly.Configure();chatOnly.Confirm();await chatOnly.Tick();
+        chatOnly.Service=chatOnly.Create(chatOnly:true);var startsBefore=chatOnly.Starts;
+        await chatOnly.Tick();
+        Check(!chatOnly.Service.Current().Settings.Enabled&&chatOnly.Service.Current().JobId is null&&chatOnly.Starts==startsBefore,
+            "chat-only startup disables a previously enabled caller and clears its active job without inference");
         var coalesced=new Harness();coalesced.Configure(new("/MESZ26",5,.25m),new("/MNQZ26",2,.25m));coalesced.Confirm();coalesced.Confirm(symbol:"/MNQZ26");
         await coalesced.Tick();coalesced.Complete("WAIT");await coalesced.Tick();
         Check(coalesced.Starts==1,"one cross-product opportunity review does not immediately launch routine reviews for every other flat contract");

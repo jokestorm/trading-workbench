@@ -41,16 +41,18 @@ public sealed class ContinuousMonitor
 
     public ContinuousMonitor(string directory,Func<MonitorInstrument,bool,CancellationToken,Task<MonitorObservation>> observe,
         Func<AnalysisRequest,Func<AnalysisRun,AnalysisRun>,AnalysisJob?> start,Func<string,AnalysisJob?> job,
-        Func<string,AnalysisRun> result,Action<string> cancel,Func<DateTimeOffset>? clock=null,ILogger<ContinuousMonitor>? logger=null,Func<BrokerTransactionReport>? transactions=null,Func<string,string,TraderDiscussion[]>? discussion=null,Func<bool>? aiAvailable=null,Func<MarketBriefState>? briefContext=null)
+        Func<string,AnalysisRun> result,Action<string> cancel,Func<DateTimeOffset>? clock=null,ILogger<ContinuousMonitor>? logger=null,Func<BrokerTransactionReport>? transactions=null,Func<string,string,TraderDiscussion[]>? discussion=null,Func<bool>? aiAvailable=null,Func<MarketBriefState>? briefContext=null,bool chatOnly=false)
     {
         Directory.CreateDirectory(directory);path=Path.Combine(directory,"current.json");
         this.observe=observe;this.start=start;this.job=job;this.result=result;this.cancel=cancel;this.clock=clock??(()=>DateTimeOffset.UtcNow);
         this.transactions=transactions;this.discussion=discussion;this.aiAvailable=aiAvailable??(()=>true);this.briefContext=briefContext;
         log=logger??Microsoft.Extensions.Logging.Abstractions.NullLogger<ContinuousMonitor>.Instance;
         state=File.Exists(path)?JsonSerializer.Deserialize<MonitorState>(File.ReadAllText(path),CodexAnalysisProvider.Json)!:new(new(false,[]),[],[]);
+        if(chatOnly)state=state with{Settings=state.Settings with{Enabled=false},JobId=null,JobSymbol=null,JobScope=null,
+            Markets=state.Markets.Select(m=>m with{Latest=null,CurrentDecision=null,AwaitingExecution=false}).ToArray()};
         ApplyUniverse(new(state.Universe?.CheckedAt,state.Settings.Instruments.Where(s=>FuturesProducts.IsTradingProduct(s.Symbol)).ToArray(),state.Universe?.Unavailable.Where(FuturesProducts.IsTradingProduct).ToArray()??[],"Discovering micro futures products automatically."));
         // Restart does not establish that a previously confirmed position is still held.
-        Save(state with{Markets=state.Markets.Select(m=>m with{Exposure=m.Exposure with{ConfirmedAt=null}}).ToArray(),Message="Trade caller ready. Confirm current positions after restart."});
+        Save(state with{Markets=state.Markets.Select(m=>m with{Exposure=m.Exposure with{ConfirmedAt=null}}).ToArray(),Message=chatOnly?"Background AI disabled. Discuss markets in Trader chat.":"Trade caller ready. Confirm current positions after restart."});
     }
     public MonitorState Current()
     {

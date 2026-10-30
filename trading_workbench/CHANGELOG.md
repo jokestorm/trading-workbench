@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.19
+
+- Remove the background AI caller and scheduled market research. Only a user
+  message in Trader chat starts inference; broker data sync continues.
+- Remove Analyze, portfolio review, caller controls, and analysis prompt editors.
+  Keep ChatGPT sign-in in Settings and automatic micro contract discovery.
+- Remove analysis-start endpoints so stale browser tabs cannot trigger AI runs.
+
 ## 0.1.18
 
 - Fix Trader Send staying disabled on ordinary HTTP Home Assistant origins.

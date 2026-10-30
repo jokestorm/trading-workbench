@@ -1,5 +1,5 @@
 try {
-  await import('./app.js?v=chat-send-1');
+  await import('./app.js?v=chat-only-1');
   function openSection(){
     const section=location.hash.slice(1);
     if(['market','trader','settings','journal'].includes(section)&&document.getElementById(section)?.hidden)document.querySelector(`[data-tab="${section}"]`).click();

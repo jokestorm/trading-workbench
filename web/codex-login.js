@@ -1,4 +1,4 @@
-const idle={state:'idle',message:'Sign in with ChatGPT to enable analysis.'};
+const idle={state:'idle',message:'Sign in with ChatGPT to use Trader chat.'};
 export function deviceUrl(value){
   try{const url=new URL(value);return url.protocol==='https:'&&url.hostname==='auth.openai.com'&&!url.port&&!url.username&&!url.password&&!url.search&&!url.hash&&url.pathname.replace(/\/$/,'')==='/codex/device'?url.href:null;}catch{return null;}
 }

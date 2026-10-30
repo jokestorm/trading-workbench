@@ -1,8 +1,6 @@
-import {mountPromptSettings} from './prompt-settings.js?v=ha-0.1.13';
-import {mountTraderChat} from './trader-chat.js?v=chat-send-1';
+import {mountChatConnection} from './chat-connection.js?v=chat-only-1';
+import {mountTraderChat} from './trader-chat.js?v=chat-only-1';
 import {mountAccountSync,observeAccountDashboard,renderAccountSource,renderAccountPositions} from './account-dashboard.js?v=account-1';
-import {mountMarketBrief} from './market-brief.js?v=ha-0.1.13';
-import {mountContinuousMonitor} from './continuous-monitor.js?v=micros-1';
 import {renderJournalMetrics} from './journal-metrics.js?v=ha-0.1.13';
 import { fetchApp, appUrl } from './http.js';
 import { mountJournalChart } from './journal-chart.js?v=ha-0.1.13';
@@ -10,8 +8,7 @@ import { filterTrades, netPnl, summarize, dateRange, easternToday } from './anal
 import { mountImport } from './import.js?v=ha-0.1.13';
 import { mountReports, renderReports } from './reports.js?v=ha-0.1.13';
 import { mountMarket } from './market.js?v=ha-0.1.13';
-import { mountAI } from './ai.js?v=http-errors-1';
-import { mountMonitor } from './market-monitor.js?v=http-errors-1';
+import { mountMonitor } from './market-monitor.js?v=chat-only-1';
 
 const $ = id => document.getElementById(id);
 const money = (n, signed=false) => `${n < 0 ? '−' : signed && n > 0 ? '+' : ''}${new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Math.abs(n))}`;
@@ -23,11 +20,9 @@ let trades = [], savedTrades = [], openPositions=[], selectedTrade = null, editi
 let renderVersion=0;
 mountReports();
 mountTraderChat();
-mountPromptSettings($('prompt-settings'));
+mountChatConnection();
 const journalChart=mountJournalChart($('equity-chart'));
 mountMarket();
-mountContinuousMonitor();
-mountMarketBrief();
 mountMonitor();
 const reportStatus=document.createElement('div');reportStatus.id='report-status';reportStatus.setAttribute('role','status');$('filters').after(reportStatus);
 const accountSource=document.createElement('p');accountSource.id='account-source';accountSource.className='small muted';accountSource.setAttribute('role','status');document.querySelector('.journal-toolbar').after(accountSource);
@@ -40,7 +35,6 @@ const positionsPanel=document.createElement('article');positionsPanel.className=
 const accountLabel=document.createElement('label');accountLabel.textContent='Account';
 const accountSelect=document.createElement('select');accountSelect.id='account';accountLabel.append(accountSelect);
 $('symbol').closest('label').before(accountLabel);
-mountAI({getFilters:()=>Object.fromEntries(['start','end','account','symbol','direction'].map(k=>[k,$(k).value])),journalDataSource:'transactions'});
 mountImport({onImported:async()=>{await loadSaved();resetFilters();}});
 mountAccountSync({onSynced:async()=>{await loadSaved();trades=savedTrades;refreshOptions();await render();}});
 function refreshOptions() {
